@@ -112,16 +112,16 @@ export default function RepoSelector({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
-      <div className="flex items-center justify-between mb-5 pb-3 border-b border-stone-100">
-        <h3 className="font-semibold text-stone-900 flex items-center gap-2">
+    <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm p-6">
+      <div className="flex items-center justify-between mb-5 pb-3 border-b border-stone-100 dark:border-stone-800/80">
+        <h3 className="font-semibold text-stone-900 dark:text-stone-100 flex items-center gap-2">
           <GitBranch className="w-5 h-5 text-orange-500" />
           Select Target Repository
         </h3>
 
         <button
           onClick={handleToggleMode}
-          className="text-xs px-3 py-1.5 rounded-lg font-medium border border-stone-200 hover:bg-stone-50 transition flex items-center gap-1 text-stone-700"
+          className="text-xs px-3 py-1.5 rounded-lg font-medium border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-850 transition flex items-center gap-1 text-stone-700 dark:text-stone-300 cursor-pointer"
         >
           {createNewMode ? (
             <>
@@ -138,10 +138,10 @@ export default function RepoSelector({
       </div>
 
       {error && (
-        <div className="mb-4 flex items-center gap-2.5 p-3 bg-red-50 border border-red-100 rounded-xl text-red-700 text-xs">
+        <div className="mb-4 flex items-center gap-2.5 p-3 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30 rounded-xl text-red-700 dark:text-red-400 text-xs">
           <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
           <span>{error}</span>
-          <button onClick={fetchRepos} className="ml-auto underline font-semibold text-red-800 hover:text-red-950">
+          <button onClick={fetchRepos} className="ml-auto underline font-semibold text-red-800 hover:text-red-950 dark:text-red-400 dark:hover:text-red-300 cursor-pointer">
             Retry
           </button>
         </div>
@@ -150,28 +150,28 @@ export default function RepoSelector({
       {createNewMode ? (
         // ----------------- Create New Repository UI -----------------
         <div className="space-y-4">
-          <div className="p-4 bg-orange-50/30 border border-orange-100/50 rounded-xl flex items-start gap-3">
+          <div className="p-4 bg-orange-50/30 dark:bg-orange-950/10 border border-orange-100/50 dark:border-orange-900/20 rounded-xl flex items-start gap-3">
             <FolderPlus className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
-            <div className="text-xs leading-relaxed text-stone-600">
-              <span className="font-semibold text-orange-800">New Repository Mode:</span> Hestia will automatically provision this repository for you on GitHub when you click the push button. Super easy!
+            <div className="text-xs leading-relaxed text-stone-600 dark:text-stone-400">
+              <span className="font-semibold text-orange-800 dark:text-orange-450">New Repository Mode:</span> Hestia will automatically provision this repository for you on GitHub when you click the push button. Super easy!
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-stone-600 mb-1.5">
+              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1.5">
                 Repository Owner
               </label>
               <input
                 type="text"
                 value={owner}
                 disabled
-                className="w-full px-3.5 py-2.5 bg-stone-100 border border-stone-200 rounded-xl text-sm font-mono text-stone-500 cursor-not-allowed"
+                className="w-full px-3.5 py-2.5 bg-stone-100 dark:bg-stone-800/50 border border-stone-200 dark:border-stone-800 rounded-xl text-sm font-mono text-stone-500 dark:text-stone-400 cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-stone-600 mb-1.5">
+              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1.5">
                 Repository Name
               </label>
               <input
@@ -179,36 +179,36 @@ export default function RepoSelector({
                 placeholder="e.g. my-awesome-project"
                 value={newRepoName}
                 onChange={handleNewRepoNameChange}
-                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 rounded-xl text-sm font-mono text-stone-800 transition"
+                className="w-full px-3.5 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 focus:bg-white dark:focus:bg-stone-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 rounded-xl text-sm font-mono text-stone-800 dark:text-stone-100 transition"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
             <div>
-              <label className="block text-xs font-medium text-stone-600 mb-1.5">
+              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1.5">
                 Default Branch
               </label>
               <input
                 type="text"
                 value={branch}
                 onChange={(e) => setBranch(e.target.value.replace(/\s+/g, ""))}
-                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 rounded-xl text-sm font-mono text-stone-800 transition"
+                className="w-full px-3.5 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 focus:bg-white dark:focus:bg-stone-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 rounded-xl text-sm font-mono text-stone-800 dark:text-stone-100 transition"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-stone-600 mb-1.5">
+              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1.5">
                 Repository Privacy
               </label>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setIsPrivate(false)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-medium transition ${
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
                     !isPrivate
-                      ? "bg-stone-900 border-stone-900 text-white"
-                      : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                      ? "bg-stone-900 dark:bg-stone-700 border-stone-900 dark:border-stone-700 text-white"
+                      : "bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-750"
                   }`}
                 >
                   <Globe className="w-4 h-4" />
@@ -217,10 +217,10 @@ export default function RepoSelector({
                 <button
                   type="button"
                   onClick={() => setIsPrivate(true)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-medium transition ${
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
                     isPrivate
-                      ? "bg-stone-900 border-stone-900 text-white"
-                      : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                      ? "bg-stone-900 dark:bg-stone-700 border-stone-900 dark:border-stone-700 text-white"
+                      : "bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-750"
                   }`}
                 >
                   <Shield className="w-4 h-4" />
@@ -235,16 +235,16 @@ export default function RepoSelector({
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-stone-600 mb-1.5">
+              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1.5">
                 Select Repository
               </label>
               {loading ? (
-                <div className="w-full px-3.5 py-2.5 border border-stone-200 bg-stone-50 rounded-xl text-xs flex items-center gap-2 text-stone-500 font-mono">
+                <div className="w-full px-3.5 py-2.5 border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 rounded-xl text-xs flex items-center gap-2 text-stone-500 dark:text-stone-400 font-mono">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-500" />
                   Loading repositories...
                 </div>
               ) : repos.length === 0 ? (
-                <div className="w-full px-3.5 py-2.5 border border-dashed border-stone-200 bg-stone-50 rounded-xl text-xs text-stone-500 font-mono">
+                <div className="w-full px-3.5 py-2.5 border border-dashed border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 rounded-xl text-xs text-stone-500 dark:text-stone-400 font-mono">
                   No repositories found. Create one!
                 </div>
               ) : (
@@ -252,16 +252,16 @@ export default function RepoSelector({
                   <select
                     value={repo}
                     onChange={handleRepoSelectChange}
-                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 rounded-xl text-sm font-mono text-stone-800 transition appearance-none cursor-pointer"
+                    className="w-full px-3.5 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 focus:bg-white dark:focus:bg-stone-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 rounded-xl text-sm font-mono text-stone-800 dark:text-stone-100 transition appearance-none cursor-pointer"
                   >
                     {repos.map((r) => (
-                      <option key={r.full_name} value={r.name}>
+                      <option key={r.full_name} value={r.name} className="dark:bg-stone-900 dark:text-stone-100">
                         {r.name} {r.private ? "🔒" : "🌐"}
                       </option>
                     ))}
                   </select>
                   {/* Custom Arrow Accent */}
-                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-stone-400">
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-stone-400 dark:text-stone-500">
                     <ArrowDown className="w-3.5 h-3.5" />
                   </div>
                 </div>
@@ -269,7 +269,7 @@ export default function RepoSelector({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-stone-600 mb-1.5">
+              <label className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1.5">
                 Target Branch
               </label>
               <input
@@ -277,25 +277,25 @@ export default function RepoSelector({
                 value={branch}
                 onChange={(e) => setBranch(e.target.value.replace(/\s+/g, ""))}
                 placeholder="e.g. main"
-                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 rounded-xl text-sm font-mono text-stone-800 transition"
+                className="w-full px-3.5 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 focus:bg-white dark:focus:bg-stone-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 rounded-xl text-sm font-mono text-stone-800 dark:text-stone-100 transition"
               />
             </div>
           </div>
 
           {repo && repos.length > 0 && (
-            <div className="flex items-center gap-1.5 text-xs text-stone-500 bg-stone-50 p-3 rounded-xl border border-stone-100 font-mono">
-              <span className="font-semibold text-stone-700">Target:</span>
+            <div className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400 bg-stone-50 dark:bg-stone-800/40 p-3 rounded-xl border border-stone-100 dark:border-stone-800/60 font-mono">
+              <span className="font-semibold text-stone-700 dark:text-stone-300">Target:</span>
               <span>github.com/{owner}/{repo}</span>
-              <span className="text-stone-300">|</span>
-              <span className="flex items-center gap-0.5 text-orange-600 font-semibold">
+              <span className="text-stone-300 dark:text-stone-700">|</span>
+              <span className="flex items-center gap-0.5 text-orange-600 dark:text-orange-400 font-semibold">
                 <GitBranch className="w-3 h-3" />
                 {branch}
               </span>
               <span className="ml-auto">
                 {repos.find((r) => r.name === repo)?.private ? (
-                  <span className="text-[10px] bg-stone-200 text-stone-700 px-2 py-0.5 rounded font-bold uppercase shrink-0">Private</span>
+                  <span className="text-[10px] bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300 px-2 py-0.5 rounded font-bold uppercase shrink-0">Private</span>
                 ) : (
-                  <span className="text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded font-bold uppercase shrink-0">Public</span>
+                  <span className="text-[10px] bg-green-100 dark:bg-green-950/20 text-green-800 dark:text-green-400 border border-green-200/20 px-2 py-0.5 rounded font-bold uppercase shrink-0">Public</span>
                 )}
               </span>
             </div>

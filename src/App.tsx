@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Flame, GitPullRequest, Laptop, Shield, Sparkles, FolderUp, HelpCircle, ArrowRight, Github, Code } from "lucide-react";
 import AuthCard from "./components/AuthCard";
 import HearthUpload from "./components/HearthUpload";
@@ -9,9 +9,31 @@ import ProgressOverlay from "./components/ProgressOverlay";
 import SplashPage from "./components/SplashPage";
 import IntroSplash from "./components/IntroSplash";
 import PricingModal from "./components/PricingModal";
+import RecentCommits from "./components/RecentCommits";
 import { UploadedFile, GithubProfile, PushStatus } from "./types";
 
 export default function App() {
+  // Sync dark/light theme dynamically based on system/device preferences
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    
+    const syncTheme = (e: MediaQueryListEvent | MediaQueryList) => {
+      if (e.matches) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    };
+
+    // Initialize on load
+    syncTheme(mediaQuery);
+
+    // Dynamic listener for device preference changes
+    mediaQuery.addEventListener("change", syncTheme);
+    return () => {
+      mediaQuery.removeEventListener("change", syncTheme);
+    };
+  }, []);
   // Splash View States
   const [showIntro, setShowIntro] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
@@ -50,6 +72,8 @@ export default function App() {
     stage: "idle",
     progress: 0,
   });
+
+  const [commitRefreshTrigger, setCommitRefreshTrigger] = useState(0);
 
   const handleAuthenticated = (savedToken: string, userProfile: GithubProfile | null) => {
     setToken(savedToken);
@@ -192,6 +216,7 @@ export default function App() {
           localStorage.setItem("hestia_push_count", next.toString());
           return next;
         });
+        setCommitRefreshTrigger(prev => prev + 1);
       }, 2200);
 
     } catch (err: any) {
@@ -226,10 +251,10 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-800 font-sans flex flex-col antialiased selection:bg-orange-100 selection:text-orange-900">
+    <div className="min-h-screen bg-stone-50 dark:bg-stone-950 text-stone-800 dark:text-stone-100 font-sans flex flex-col antialiased selection:bg-orange-100 dark:selection:bg-orange-950/40 selection:text-orange-900 dark:selection:text-orange-400">
       
       {/* Immersive Header */}
-      <header className="bg-white border-b border-stone-200 py-5 px-6 sticky top-0 z-30 shrink-0">
+      <header className="bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 py-5 px-6 sticky top-0 z-30 shrink-0">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           
           {/* Logo Brand Metaphor */}
@@ -239,12 +264,12 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 id="brand-title" className="text-xl font-black text-stone-950 tracking-tight leading-none uppercase">Hestia</h1>
-                <span className="text-[10px] font-mono text-orange-700 bg-orange-50 border border-orange-100 font-bold px-2 py-0.5 rounded-md">
+                <h1 id="brand-title" className="text-xl font-black text-stone-950 dark:text-stone-50 tracking-tight leading-none uppercase">Hestia</h1>
+                <span className="text-[10px] font-mono text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 font-bold px-2 py-0.5 rounded-md">
                   v1.2.0
                 </span>
               </div>
-              <p className="text-xs text-stone-500 font-medium mt-1">
+              <p className="text-xs text-stone-500 dark:text-stone-400 font-medium mt-1">
                 The Sacred Hearth for code packages. Ignite and push direct to GitHub.
               </p>
             </div>
@@ -252,11 +277,11 @@ export default function App() {
 
           {/* Quick Context Guides */}
           <div className="flex items-center gap-5">
-            <div className="hidden lg:flex items-center gap-2 text-xs text-stone-500 font-medium font-mono">
+            <div className="hidden lg:flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400 font-medium font-mono">
               <Laptop className="w-4 h-4 text-stone-400" />
               <span>Workspace Port: 3000</span>
             </div>
-            <div className="hidden lg:flex items-center gap-2 text-xs text-stone-500 font-medium font-mono">
+            <div className="hidden lg:flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400 font-medium font-mono">
               <Shield className="w-4 h-4 text-stone-400" />
               <span>HTTPS Sandbox Ingress</span>
             </div>
@@ -265,7 +290,7 @@ export default function App() {
               href="https://github.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-stone-600 hover:text-stone-900 bg-stone-50 border border-stone-200 hover:border-stone-300 px-3 py-2 rounded-xl flex items-center gap-1.5 font-semibold transition"
+              className="text-xs text-stone-600 dark:text-stone-350 hover:text-stone-900 dark:hover:text-white bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 px-3 py-2 rounded-xl flex items-center gap-1.5 font-semibold transition cursor-pointer"
             >
               <Github className="w-4 h-4" />
               GitHub Portal
@@ -336,6 +361,14 @@ export default function App() {
                   setCommitMessage={setCommitMessage}
                   isPremium={isPremium}
                   onUpgradeClick={() => setIsPricingModalOpen(true)}
+                />
+
+                {/* Recent Transmissions History */}
+                <RecentCommits
+                  token={token}
+                  owner={owner}
+                  repo={repo}
+                  refreshTrigger={commitRefreshTrigger}
                 />
 
                 {/* Large visual pushing trigger */}

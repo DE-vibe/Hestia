@@ -95,6 +95,38 @@ app.post("/api/github/repos", async (req, res) => {
   }
 });
 
+// 2.5. Fetch last 5 commits for a repository
+app.post("/api/github/commits", async (req, res) => {
+  const { token, owner, repo } = req.body;
+  if (!token || !owner || !repo) {
+    return res.status(400).json({ error: "Missing required parameters (token, owner, repo)" });
+  }
+
+  try {
+    const commits = await fetchGithub(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=5`, token);
+    const commitList = commits.map((item: any) => ({
+      sha: item.sha,
+      message: item.commit.message,
+      author: {
+        name: item.commit.author?.name || "Unknown",
+        email: item.commit.author?.email || "",
+        date: item.commit.author?.date || new Date().toISOString(),
+        avatar_url: item.author?.avatar_url || null,
+        login: item.author?.login || null,
+      },
+      html_url: item.html_url,
+    }));
+    res.json(commitList);
+  } catch (err: any) {
+    // If repo is empty or doesn't have commits yet, handle gracefully (GitHub API returns 409 or 404)
+    if (err.status === 409 || err.status === 404) {
+      return res.json([]);
+    }
+    console.error("Error fetching commits:", err);
+    res.status(err.status || 500).json({ error: err.message || "Failed to fetch commits" });
+  }
+});
+
 // 3. Create a new repository
 app.post("/api/github/create-repo", async (req, res) => {
   const { token, name, isPrivate, description } = req.body;

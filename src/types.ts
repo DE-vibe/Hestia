@@ -40,3 +40,17 @@ export interface PushStatus {
   error?: string;
   resultUrl?: string;
 }
+
+export interface GithubCommit {
+  sha: string;
+  message: string;
+  author: {
+    name: string;
+    email: string;
+    date: string;
+    avatar_url: string | null;
+    login: string | null;
+  };
+  html_url: string;
+}
+

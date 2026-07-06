@@ -78,7 +78,7 @@ export default function AuthCard({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 relative overflow-hidden transition-all duration-300">
+    <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm p-6 relative overflow-hidden transition-all duration-300">
       {/* Visual Accent */}
       <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600" />
 
@@ -92,18 +92,18 @@ export default function AuthCard({
                 referrerPolicy="no-referrer"
                 className="w-14 h-14 rounded-full border-2 border-orange-500 shadow-sm object-cover"
               />
-              <span className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full flex items-center justify-center">
+              <span className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-white dark:border-stone-900 rounded-full flex items-center justify-center">
                 <CheckCircle2 className="w-2.5 h-2.5 text-white" />
               </span>
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-stone-900 leading-tight">{profile.name}</h3>
-                <span className="text-xs text-orange-600 font-mono bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100">
+                <h3 className="font-semibold text-stone-900 dark:text-stone-100 leading-tight">{profile.name}</h3>
+                <span className="text-xs text-orange-600 dark:text-orange-400 font-mono bg-orange-50 dark:bg-orange-950/20 px-2 py-0.5 rounded-full border border-orange-100 dark:border-orange-900/30">
                   Hearth Connected
                 </span>
               </div>
-              <p className="text-sm text-stone-500 font-mono">@{profile.login}</p>
+              <p className="text-sm text-stone-500 dark:text-stone-400 font-mono">@{profile.login}</p>
             </div>
           </div>
 
@@ -112,14 +112,14 @@ export default function AuthCard({
               href={profile.html_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-stone-600 hover:text-stone-900 flex items-center gap-1.5 px-3 py-2 rounded-lg border border-stone-200 hover:border-stone-300 bg-stone-50 transition"
+              className="text-xs text-stone-600 hover:text-stone-900 dark:text-stone-300 dark:hover:text-white flex items-center gap-1.5 px-3 py-2 rounded-lg border border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 bg-stone-50 dark:bg-stone-800 transition"
             >
               <Github className="w-3.5 h-3.5" />
               View Profile
             </a>
             <button
               onClick={handleDisconnect}
-              className="text-xs text-red-600 hover:text-white flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 hover:bg-red-600 transition"
+              className="text-xs text-red-600 hover:text-white dark:text-red-400 dark:hover:text-white flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 dark:border-red-900/40 hover:bg-red-600 dark:hover:bg-red-600 transition"
             >
               <LogOut className="w-3.5 h-3.5" />
               Disconnect
@@ -129,12 +129,12 @@ export default function AuthCard({
       ) : (
         <div>
           <div className="flex items-start gap-4 mb-5">
-            <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-100 text-orange-600">
+            <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 rounded-xl border border-amber-100 dark:border-orange-900/30 text-orange-600 dark:text-orange-400">
               <Key className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-stone-900">Connect your GitHub Hearth</h3>
-              <p className="text-sm text-stone-500 leading-relaxed mt-1">
+              <h3 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Connect your GitHub Hearth</h3>
+              <p className="text-sm text-stone-500 dark:text-stone-400 leading-relaxed mt-1">
                 To securely push code packages, Hestia requires a GitHub Personal Access Token (PAT). 
                 Your token is stored safely in your browser and never leaves your device.
               </p>
@@ -143,7 +143,7 @@ export default function AuthCard({
 
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label htmlFor="pat" className="block text-xs font-medium text-stone-600 mb-1.5">
+              <label htmlFor="pat" className="block text-xs font-medium text-stone-600 dark:text-stone-400 mb-1.5">
                 GitHub Personal Access Token (classic or fine-grained)
               </label>
               <div className="relative">
@@ -154,14 +154,14 @@ export default function AuthCard({
                   value={inputToken}
                   onChange={(e) => setInputToken(e.target.value)}
                   disabled={loading}
-                  className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 disabled:opacity-50 transition"
+                  className="w-full pl-10 pr-4 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-sm font-mono focus:bg-white dark:focus:bg-stone-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 dark:text-stone-100 disabled:opacity-50 transition"
                 />
-                <Github className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Github className="w-4 h-4 text-stone-400 dark:text-stone-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               </div>
             </div>
 
             {error && (
-              <p className="text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-100">
+              <p className="text-xs text-red-600 bg-red-50 dark:bg-red-950/20 p-2.5 rounded-lg border border-red-100 dark:border-red-900/30">
                 {error}
               </p>
             )}
@@ -171,7 +171,7 @@ export default function AuthCard({
                 href="https://github.com/settings/tokens/new?scopes=repo,write:repo_hook&description=Hestia%20Code%20Hearth"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-orange-600 hover:text-orange-700 underline font-medium"
+                className="text-xs text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-350 underline font-medium"
               >
                 Create a PAT on GitHub with "repo" scope →
               </a>
@@ -179,7 +179,7 @@ export default function AuthCard({
               <button
                 type="submit"
                 disabled={loading || !inputToken.trim()}
-                className="w-full sm:w-auto px-5 py-2.5 bg-stone-900 hover:bg-stone-800 text-white font-medium text-sm rounded-xl flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:hover:bg-stone-900 transition"
+                className="w-full sm:w-auto px-5 py-2.5 bg-stone-900 dark:bg-stone-800 hover:bg-stone-850 dark:hover:bg-stone-700 text-white font-medium text-sm rounded-xl flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:hover:bg-stone-900 dark:disabled:bg-stone-800 transition"
               >
                 {loading ? (
                   <>
