@@ -1,6 +1,6 @@
 {
   "name": "Hestia Code Hearth",
-  "description": "Push code packages from AI Studio or your device directly to GitHub with a smart Gemini-assisted commit companion.",
+  "description": "Push code packages from AI Studio or your device directly to GitHub seamlessly.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

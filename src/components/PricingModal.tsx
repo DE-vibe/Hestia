@@ -61,7 +61,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
             <div>
               <h3 className="text-2xl font-black tracking-tight leading-tight">UPGRADE TO THE GOLDEN HEARTH</h3>
               <p className="text-xs text-stone-400 mt-2 leading-relaxed">
-                Stoke your engineering hearth to maximum capacity. Fuel your projects with unlimited transfers and full Gemini AI intelligence.
+                Stoke your engineering hearth to maximum capacity. Fuel your projects with unlimited transfers and full GitHub repository control.
               </p>
             </div>
 
@@ -81,8 +81,8 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                   <Check className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold">Full Gemini AI Copilot</h4>
-                  <p className="text-[10px] text-stone-400 mt-0.5">Unlock Gemini-driven commit message recommendations and automatic premium readme files.</p>
+                  <h4 className="text-xs font-bold">Advanced Repository Automation</h4>
+                  <p className="text-[10px] text-stone-400 mt-0.5">Automatic branch setup, custom README generation, and high-speed commit processing.</p>
                 </div>
               </div>
 
@@ -119,7 +119,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                       : "text-stone-500 hover:text-stone-850"
                   }`}
                 >
-                  Monthly ($9)
+                  Monthly ($9.99)
                 </button>
                 <button
                   type="button"
@@ -130,7 +130,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                       : "text-stone-500 hover:text-stone-850"
                   }`}
                 >
-                  Yearly ($49)
+                  Yearly ($49.99)
                   <span className="bg-amber-500 text-stone-950 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded-full scale-90">
                     Save 55%
                   </span>
@@ -152,7 +152,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                   <div>
                     <span className="block text-[10px] text-orange-800 font-semibold uppercase tracking-wider">Hearth Master License</span>
                     <span className="text-xs font-bold text-stone-900">
-                      {billingPeriod === "monthly" ? "$9.00 / billed monthly" : "$49.00 / billed annually"}
+                      {billingPeriod === "monthly" ? "$9.99 / billed monthly" : "$49.99 / billed annually"}
                     </span>
                   </div>
                   <Sparkles className="w-5 h-5 text-orange-500 fill-orange-200 animate-pulse" />

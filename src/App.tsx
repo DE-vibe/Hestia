@@ -10,7 +10,7 @@ import SplashPage from "./components/SplashPage";
 import IntroSplash from "./components/IntroSplash";
 import PricingModal from "./components/PricingModal";
 import RecentCommits from "./components/RecentCommits";
-import { UploadedFile, GithubProfile, PushStatus } from "./types";
+import { UploadedFile, GithubProfile, PushStatus, AuthMode } from "./types";
 
 export default function App() {
   // Sync dark/light theme dynamically based on system/device preferences
@@ -63,6 +63,11 @@ export default function App() {
   const [branch, setBranch] = useState("main");
   const [createIfNotExist, setCreateIfNotExist] = useState(false);
   const [isPrivate, setIsPrivate] = useState(false);
+
+  // SSH and Auth Mode
+  const [authMode, setAuthMode] = useState<AuthMode>("token");
+  const [sshUrl, setSshUrl] = useState<string>(() => localStorage.getItem("hestia_ssh_url") || "");
+  const [deployKey, setDeployKey] = useState<string>(() => localStorage.getItem("hestia_ssh_key") || "");
 
   // Commit Details
   const [commitMessage, setCommitMessage] = useState("feat: bootstrap workspace via Hestia Hearth");
@@ -127,9 +132,40 @@ export default function App() {
       alert("No files are currently selected for pushing. Please check at least one file box!");
       return;
     }
-    if (!repo.trim()) {
-      alert("Please select or enter a target repository name.");
-      return;
+    if (authMode === "ssh") {
+      if (!sshUrl.trim()) {
+        alert("Please enter a valid SSH Remote URL (e.g. git@github.com:owner/repo.git).");
+        return;
+      }
+
+      // Pre-validation SSH connectivity check via backend proxy
+      setPushStatus({ stage: "preparing", progress: 5, currentFile: "Validating SSH remote URL connectivity..." });
+      try {
+        const checkRes = await fetch("/api/ssh/test-connection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sshUrl: sshUrl.trim(),
+            deployKey: deployKey.trim(),
+          }),
+        });
+        const checkData = await checkRes.json();
+        if (!checkRes.ok || !checkData.success) {
+          throw new Error(checkData.error || "SSH connectivity check failed. Verify your SSH Remote URL and Deployment Key.");
+        }
+      } catch (checkErr: any) {
+        setPushStatus({
+          stage: "error",
+          progress: 0,
+          error: `SSH Pre-Validation Failed: ${checkErr.message}`,
+        });
+        return;
+      }
+    } else {
+      if (!repo.trim()) {
+        alert("Please select or enter a target repository name.");
+        return;
+      }
     }
     if (!commitMessage.trim()) {
       alert("Please enter a commit message describing your changes.");
@@ -176,6 +212,9 @@ export default function App() {
           files: selectedFiles.map((f) => ({ path: f.path, content: f.content })),
           createIfNotExist,
           isPrivate,
+          authMode,
+          sshUrl,
+          deployKey,
         }),
       });
 
@@ -340,7 +379,7 @@ export default function App() {
                 {/* Repository config */}
                 <RepoSelector
                   token={token}
-                  profile={profile}
+                  profile={profile!}
                   owner={owner}
                   setOwner={setOwner}
                   repo={repo}
@@ -351,14 +390,21 @@ export default function App() {
                   setCreateIfNotExist={setCreateIfNotExist}
                   isPrivate={isPrivate}
                   setIsPrivate={setIsPrivate}
+                  authMode={authMode}
+                  setAuthMode={setAuthMode}
+                  sshUrl={sshUrl}
+                  setSshUrl={setSshUrl}
+                  deployKey={deployKey}
+                  setDeployKey={setDeployKey}
                 />
 
-                {/* Commit customizer & Gemini agent */}
+                {/* Commit customizer */}
                 <CommitControls
                   files={files}
                   onAddOrUpdateFile={handleAddOrUpdateFile}
                   commitMessage={commitMessage}
                   setCommitMessage={setCommitMessage}
+                  token={token}
                   isPremium={isPremium}
                   onUpgradeClick={() => setIsPricingModalOpen(true)}
                 />
@@ -405,13 +451,13 @@ export default function App() {
                         <span>🔒</span> Daily Transfer Limit Exceeded
                       </p>
                       <p className="text-[10px] text-stone-500 mt-1 leading-relaxed">
-                        Unlock unlimited pushes, custom private repos, and Hestia's Gemini AI.
+                        Unlock unlimited pushes and custom private repos.
                       </p>
                       <button
                         onClick={() => setIsPricingModalOpen(true)}
                         className="mt-3 px-4 py-1.5 bg-stone-950 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg hover:bg-stone-850 transition cursor-pointer"
                       >
-                        Activate Golden Hearth ($9)
+                        Activate Golden Hearth ($9.99)
                       </button>
                     </div>
                   ) : null}

@@ -1,7 +1,9 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
+import os from "os";
+import { spawnSync } from "child_process";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -13,15 +15,20 @@ const PORT = 3000;
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    }
+// Helper: Parse SSH remote URL to extract owner and repo
+function parseSshUrl(sshUrl: string): { owner: string; repo: string } | null {
+  if (!sshUrl || typeof sshUrl !== "string") return null;
+  const trimmed = sshUrl.trim();
+  const regex = /^(?:ssh:\/\/)?git@[\w.-]+(?::\d+)?[:\/]([^\/]+)\/([^\/]+?)(?:\.git)?$/i;
+  const match = trimmed.match(regex);
+  if (match) {
+    return {
+      owner: match[1],
+      repo: match[2].replace(/\.git$/, ""),
+    };
   }
-});
+  return null;
+}
 
 // Helper: Make fetch request to GitHub API
 async function fetchGithub(url: string, token: string, options: RequestInit = {}) {
@@ -158,10 +165,140 @@ app.post("/api/github/create-repo", async (req, res) => {
 
 // 4. Push files to a repository (The Hestia Code Hearth Engine!)
 app.post("/api/github/push", async (req, res) => {
-  const { token, owner, repo, branch, commitMessage, files, createIfNotExist, isPrivate } = req.body;
+  const { token, owner, repo, branch, commitMessage, files, createIfNotExist, isPrivate, authMode, sshUrl, deployKey } = req.body;
 
-  if (!token || !owner || !repo || !branch || !commitMessage || !files || !Array.isArray(files)) {
+  if (!commitMessage || !files || !Array.isArray(files)) {
     return res.status(400).json({ error: "Missing required parameters for pushing" });
+  }
+
+  // Handle SSH Remote URL & Deployment Key mode
+  if (authMode === "ssh" || (sshUrl && sshUrl.trim().startsWith("git@"))) {
+    const targetSshUrl = (sshUrl || "").trim();
+    if (!targetSshUrl) {
+      return res.status(400).json({ error: "Missing SSH Remote URL for SSH push mode" });
+    }
+
+    const parsed = parseSshUrl(targetSshUrl);
+    const targetOwner = owner || parsed?.owner || "remote";
+    const targetRepo = repo || parsed?.repo || "repository";
+    const targetBranch = branch || "main";
+
+    let tempDir: string | null = null;
+    let keyPath: string | null = null;
+
+    try {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hestia-ssh-"));
+
+      let gitSshCmd = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null";
+
+      if (deployKey && deployKey.trim()) {
+        keyPath = path.join(tempDir, "id_rsa");
+        const cleanedKey = deployKey.trim().replace(/\r\n/g, "\n") + "\n";
+        fs.writeFileSync(keyPath, cleanedKey, { mode: 0o600 });
+        fs.chmodSync(keyPath, 0o600);
+        gitSshCmd = `ssh -i "${keyPath}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null`;
+      }
+
+      const execEnv: NodeJS.ProcessEnv = {
+        ...process.env,
+        GIT_SSH_COMMAND: gitSshCmd,
+      };
+
+      const runGit = (args: string[]) => {
+        const result = spawnSync("git", args, {
+          cwd: tempDir!,
+          env: execEnv,
+          timeout: 45000,
+        });
+        if (result.status !== 0) {
+          const stderr = result.stderr ? result.stderr.toString() : "";
+          const stdout = result.stdout ? result.stdout.toString() : "";
+          throw new Error(stderr || stdout || `Git process failed (${args.join(" ")})`);
+        }
+        return result.stdout ? result.stdout.toString().trim() : "";
+      };
+
+      // 1. Initialize git repo in temp directory
+      runGit(["init", "-b", targetBranch]);
+      runGit(["config", "user.name", "Hestia Code Hearth"]);
+      runGit(["config", "user.email", "hestia@codehearth.local"]);
+
+      // 2. Write all files to temp dir
+      for (const file of files) {
+        if (!file.path || file.content === undefined) continue;
+        const filePath = path.join(tempDir, file.path);
+        const fileDir = path.dirname(filePath);
+        fs.mkdirSync(fileDir, { recursive: true });
+        const buffer = Buffer.from(file.content, "base64");
+        fs.writeFileSync(filePath, buffer);
+      }
+
+      // 3. Add files and commit
+      runGit(["add", "-A"]);
+      try {
+        runGit(["commit", "-m", commitMessage]);
+      } catch (commitErr: any) {
+        console.log("Git commit output info:", commitErr.message);
+      }
+
+      // 4. Add remote URL
+      runGit(["remote", "add", "origin", targetSshUrl]);
+
+      // 5. If createIfNotExist and token is supplied, ensure repo exists via API first
+      if (createIfNotExist && token && targetRepo) {
+        try {
+          await fetchGithub("https://api.github.com/user/repos", token, {
+            method: "POST",
+            body: JSON.stringify({
+              name: targetRepo,
+              private: isPrivate ?? false,
+              description: "Codebase pushed via Hestia Code Hearth (SSH)",
+              auto_init: false,
+            }),
+          });
+        } catch (e) {
+          // Repo might already exist, ignore
+        }
+      }
+
+      // 6. Push to SSH remote
+      console.log(`Pushing to ${targetSshUrl} on branch ${targetBranch} via SSH...`);
+      runGit(["push", "-u", "origin", targetBranch]);
+
+      let commitSha = "latest";
+      try {
+        commitSha = runGit(["rev-parse", "HEAD"]);
+      } catch {
+        // ignore
+      }
+
+      return res.json({
+        success: true,
+        repositoryUrl: `https://github.com/${targetOwner}/${targetRepo}`,
+        commitUrl: `https://github.com/${targetOwner}/${targetRepo}/commit/${commitSha}`,
+        branch: targetBranch,
+        sha: commitSha,
+      });
+    } catch (err: any) {
+      console.error("SSH push error:", err);
+      return res.status(500).json({
+        error: err.message || "Failed to push to repository via SSH deployment key",
+        details: err.stack || null,
+      });
+    } finally {
+      if (tempDir && fs.existsSync(tempDir)) {
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch (cleanupErr) {
+          console.error("Temp directory cleanup failed:", cleanupErr);
+        }
+      }
+    }
+  }
+
+  // Standard GitHub REST API Token Push Flow
+  if (!token || !owner || !repo || !branch) {
+    return res.status(400).json({ error: "Missing required parameters for GitHub token push" });
   }
 
   try {
@@ -299,119 +436,252 @@ app.post("/api/github/push", async (req, res) => {
   }
 });
 
-// 5. Suggest Git Commit Message using Gemini
-app.post("/api/gemini/suggest-commit", async (req, res) => {
-  const { files, projectSummary } = req.body;
-
-  if (!files || !Array.isArray(files) || files.length === 0) {
-    return res.status(400).json({ error: "No files provided for analysis" });
-  }
+// 5. Generate SSH Key Pair for Deploy Keys
+app.post("/api/ssh/generate-keypair", (req, res) => {
+  const comment = req.body?.comment || "hestia-deploy-key";
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hestia-sshgen-"));
+  const keyPath = path.join(tempDir, "id_ed25519");
 
   try {
-    // Prepare code snapshot for Gemini
-    // We pass list of file paths, and if there are key config files, we pass a tiny snippet
-    const filesList = files.map((f: any) => `- ${f.path} (${(f.size / 1024).toFixed(1)} KB)`).join("\n");
-    
-    // Find some small key files (like package.json or config or brief file names) to help Gemini identify the tech stack
-    const keyFiles = files.filter((f: any) => 
-      f.path.includes("package.json") || 
-      f.path.includes("App.tsx") || 
-      f.path.includes("index.css") ||
-      f.path.includes("metadata.json") ||
-      f.path.includes("server.ts")
-    ).slice(0, 3);
-
-    let codeSnippets = "";
-    for (const k of keyFiles) {
-      if (k.content) {
-        const decoded = Buffer.from(k.content, 'base64').toString('utf-8').slice(0, 1500);
-        codeSnippets += `\n--- File: ${k.path} ---\n${decoded}\n`;
-      }
-    }
-
-    const prompt = `You are a Senior Release Engineer and Git Version Control Master.
-Analyze the following uploaded files and structure, and draft a high-quality, professional, structured Git commit message.
-
-User's brief project description or context: "${projectSummary || 'No extra context provided'}"
-
-Here is the list of files to be committed:
-${filesList}
-
-Here are snippets from key files:
-${codeSnippets}
-
-Generate a beautifully formatted git commit message. It must include:
-1. A concise, descriptive subject line (under 60 characters) using conventional commits (e.g. "feat: add user authentication", "refactor: simplify layout", "init: bootstrap workspace").
-2. A brief, bulleted body summarizing the main changes, technology stack identified, and files structured.
-Write only the commit message itself. Do not wrap in markdown code blocks like \`\`\`git or \`\`\`. Just return the raw text.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
+    const result = spawnSync("ssh-keygen", ["-t", "ed25519", "-C", comment, "-f", keyPath, "-N", ""], {
+      timeout: 10000,
     });
 
-    const commitMessage = response.text || "feat: upload code package via Hestia Hearth";
-    res.json({ commitMessage: commitMessage.trim() });
+    if (result.status !== 0) {
+      throw new Error(result.stderr?.toString() || "Failed executing ssh-keygen");
+    }
+
+    const privateKey = fs.readFileSync(keyPath, "utf8");
+    const publicKey = fs.readFileSync(`${keyPath}.pub`, "utf8");
+
+    res.json({ privateKey, publicKey, comment });
   } catch (err: any) {
-    console.error("Gemini Suggest-Commit failed:", err);
-    res.status(500).json({ error: "Failed to generate AI commit message recommendation." });
+    console.error("ssh-keygen execution failed, falling back to RSA:", err);
+    try {
+      const crypto = require("crypto");
+      const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+        publicKeyEncoding: { type: "pkcs1", format: "pem" },
+        privateKeyEncoding: { type: "pkcs1", format: "pem" },
+      });
+      const formattedPub = `ssh-rsa ${Buffer.from(publicKey).toString("base64")} ${comment}`;
+      res.json({ privateKey, publicKey: formattedPub, comment });
+    } catch (fallbackErr: any) {
+      res.status(500).json({ error: "Failed to generate SSH keypair" });
+    }
+  } finally {
+    if (tempDir && fs.existsSync(tempDir)) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch (e) {
+        // ignore
+      }
+    }
   }
 });
 
-// 6. Generate README using Gemini
-app.post("/api/gemini/generate-readme", async (req, res) => {
-  const { files, projectName, projectDescription } = req.body;
+// 5.5 Test SSH Connection Endpoint
+app.post("/api/ssh/test-connection", async (req, res) => {
+  const { sshUrl, deployKey } = req.body || {};
 
-  if (!files || !Array.isArray(files)) {
-    return res.status(400).json({ error: "No files provided" });
+  if (!sshUrl || typeof sshUrl !== "string" || !sshUrl.trim()) {
+    return res.status(400).json({ success: false, error: "SSH Remote URL is required" });
   }
+
+  const cleanedUrl = sshUrl.trim();
+
+  // Basic format check
+  if (!cleanedUrl.startsWith("git@") && !cleanedUrl.startsWith("ssh://")) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid SSH Remote URL format. Must start with git@ or ssh:// (e.g. git@github.com:owner/repo.git)",
+    });
+  }
+
+  let tempDir: string | null = null;
+  let gitSshCmd = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectTimeout=8";
 
   try {
-    const filesList = files.map((f: any) => `- ${f.path} (${(f.size / 1024).toFixed(1)} KB)`).join("\n");
-    
-    // Find some small key files
-    const keyFiles = files.filter((f: any) => 
-      f.path.includes("package.json") || 
-      f.path.includes("App.tsx") || 
-      f.path.includes("server.ts")
-    ).slice(0, 3);
-
-    let codeSnippets = "";
-    for (const k of keyFiles) {
-      if (k.content) {
-        const decoded = Buffer.from(k.content, 'base64').toString('utf-8').slice(0, 1500);
-        codeSnippets += `\n--- File: ${k.path} ---\n${decoded}\n`;
-      }
+    if (deployKey && typeof deployKey === "string" && deployKey.trim().length > 0) {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hestia-ssh-test-"));
+      const keyPath = path.join(tempDir, "id_rsa");
+      fs.writeFileSync(keyPath, deployKey.trim() + "\n", { mode: 0o600 });
+      gitSshCmd = `ssh -i "${keyPath}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectTimeout=8`;
     }
 
-    const prompt = `You are a Technical Writer and Developer Experience specialist.
-Generate an elegant, professional, highly detailed, and complete README.md for a repository named "${projectName || 'My App'}".
+    const execEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      GIT_SSH_COMMAND: gitSshCmd,
+    };
 
-Context provided by the developer: "${projectDescription || 'No description provided'}"
-
-Here is the file structure of the repository:
-${filesList}
-
-Here are snippets from some core files to help you understand the tech stack, setup, and features:
-${codeSnippets}
-
-Instructions for the README:
-- Start with a beautiful header with the project title and a short, inviting description.
-- Include sections for: Features, Tech Stack (highlighting identified tech), Project Structure, Getting Started (with precise installation, dev, and build instructions based on package.json if present), and contribution notes.
-- Use clean Markdown styling with icons, bullet points, and code blocks.
-- Do not write generic placeholders like "add installation here". Write actual command snippets (e.g. 'npm install', 'npm run dev') based on your understanding of the files.
-- Return ONLY the raw markdown of the README.md file. No introductory or concluding remarks outside the markdown.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
+    const result = spawnSync("git", ["ls-remote", "--heads", cleanedUrl], {
+      env: execEnv,
+      timeout: 10000,
     });
 
-    res.json({ readme: response.text?.trim() || "# Project" });
+    if (result.status === 0) {
+      const output = result.stdout ? result.stdout.toString().trim() : "";
+      const branchCount = output ? output.split("\n").filter(Boolean).length : 0;
+      return res.json({
+        success: true,
+        message: `Connected successfully! (${branchCount} remote branch(es) found)`,
+        details: output ? output.split("\n").slice(0, 5).join("\n") : "Empty repository or no heads found",
+      });
+    } else {
+      const stderr = result.stderr ? result.stderr.toString().trim() : "";
+      const stdout = result.stdout ? result.stdout.toString().trim() : "";
+      const rawError = stderr || stdout || "Connection timed out or host unreachable";
+
+      let userFriendlyError = rawError;
+      if (rawError.includes("Permission denied (publickey)")) {
+        userFriendlyError = "Permission denied (publickey): The SSH key is invalid or not authorized in GitHub Deploy Keys.";
+      } else if (rawError.includes("Could not resolve hostname")) {
+        userFriendlyError = "Could not resolve hostname: Check that the SSH URL hostname is valid (e.g. github.com).";
+      } else if (rawError.includes("Repository not found")) {
+        userFriendlyError = "Repository not found: Please verify that the repository exists on GitHub and your key has access.";
+      }
+
+      return res.status(400).json({
+        success: false,
+        error: userFriendlyError,
+        rawError,
+      });
+    }
   } catch (err: any) {
-    console.error("Gemini Generate-README failed:", err);
-    res.status(500).json({ error: "Failed to generate AI README recommendation." });
+    console.error("SSH connectivity check exception:", err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || "Internal server error performing SSH check",
+    });
+  } finally {
+    if (tempDir && fs.existsSync(tempDir)) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch (e) {
+        // ignore
+      }
+    }
   }
+});
+
+// 6. GitHub Copilot & Models Commit Suggestion Endpoint
+app.post("/api/copilot/suggest-commit", async (req, res) => {
+  const { token, files, style } = req.body || {};
+
+  if (!files || !Array.isArray(files) || files.length === 0) {
+    return res.status(400).json({ error: "No files provided for commit analysis" });
+  }
+
+  // Summarize file structure and snippet previews for prompt context
+  const fileSummaries = files
+    .slice(0, 15)
+    .map((f: { path: string; content?: string }) => {
+      let preview = "";
+      if (f.content) {
+        try {
+          const decoded = Buffer.from(f.content, "base64").toString("utf-8");
+          preview = decoded.slice(0, 300).replace(/\n/g, " ");
+        } catch (e) {
+          preview = "[binary or base64 file]";
+        }
+      }
+      return `- File: ${f.path}\n  Preview: ${preview}`;
+    })
+    .join("\n");
+
+  const prompt = `You are GitHub Copilot assisting a developer in writing a conventional commit message.
+Analyze the following staged files (${files.length} total files):
+${fileSummaries}
+
+Respond strictly in valid JSON format with three keys:
+1. "commitMessage": A single line conventional commit message following standard format (e.g. "feat(auth): integrate SSH keypair generation and local storage UI" or "fix(parser): resolve zip parsing issue"). Max 72 chars.
+2. "summary": A concise 2-3 bullet point summary of key changes made.
+3. "prDescription": A markdown formatted PR description section summarizing the package changes.
+
+JSON output structure:
+{
+  "commitMessage": "...",
+  "summary": "...",
+  "prDescription": "..."
+}`;
+
+  let responseData: any = null;
+  let source = "";
+
+  // 1. Try GitHub Models / Copilot API if user provided a GitHub token
+  if (token && typeof token === "string" && token.trim().length > 0) {
+    try {
+      const copilotRes = await fetch("https://models.inference.ai.azure.com/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token.trim()}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: "You are GitHub Copilot. You respond strictly in JSON." },
+            { role: "user", content: prompt },
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.3,
+        }),
+      });
+
+      if (copilotRes.ok) {
+        const json = await copilotRes.json();
+        const contentStr = json.choices?.[0]?.message?.content;
+        if (contentStr) {
+          responseData = JSON.parse(contentStr);
+          source = "github-copilot-gpt4o";
+        }
+      } else {
+        console.warn("GitHub Models call returned status:", copilotRes.status);
+      }
+    } catch (err) {
+      console.warn("Attempt to call GitHub Models API failed, falling back to Gemini:", err);
+    }
+  }
+
+  // 2. Fallback to Gemini API if GitHub Copilot API was unavailable or returned error
+  if (!responseData && process.env.GEMINI_API_KEY) {
+    try {
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      if (response.text) {
+        responseData = JSON.parse(response.text);
+        source = "gemini-2.5-flash";
+      }
+    } catch (geminiErr) {
+      console.error("Gemini fallback also failed:", geminiErr);
+    }
+  }
+
+  // 3. Fallback deterministic fallback if both APIs fail
+  if (!responseData) {
+    const mainFile = files[0]?.path || "codebase";
+    responseData = {
+      commitMessage: `feat(workspace): update ${files.length} package file(s) including ${mainFile}`,
+      summary: `• Modified ${files.length} file(s) in workspace\n• Updated primary entry ${mainFile}`,
+      prDescription: `## Changes\n- Updated ${files.length} files in Hestia Code Hearth package`,
+    };
+    source = "hestia-fallback";
+  }
+
+  res.json({
+    commitMessage: responseData.commitMessage || `feat: update ${files.length} files`,
+    summary: responseData.summary || "",
+    prDescription: responseData.prDescription || "",
+    source,
+  });
 });
 
 // Serve frontend assets and bootstrap server

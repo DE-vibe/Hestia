@@ -10,6 +10,8 @@ export interface UploadedFile {
   selected: boolean; // whether to include this file in the commit
 }
 
+export type AuthMode = 'token' | 'ssh';
+
 export interface CommitSettings {
   owner: string;
   repo: string;
@@ -17,6 +19,9 @@ export interface CommitSettings {
   commitMessage: string;
   createIfNotExist: boolean;
   isPrivate: boolean;
+  authMode?: AuthMode;
+  sshUrl?: string;
+  deployKey?: string;
 }
 
 export interface GithubProfile {

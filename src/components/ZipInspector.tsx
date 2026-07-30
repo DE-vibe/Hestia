@@ -1,5 +1,22 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { FolderTree, Search, File, CheckSquare, Square, Check, RefreshCw, Layers, FileCode2, FileJson, FileText, Settings, FileCode } from "lucide-react";
+import {
+  FolderTree,
+  Search,
+  File,
+  CheckSquare,
+  Square,
+  Check,
+  RefreshCw,
+  Layers,
+  FileCode2,
+  FileJson,
+  FileText,
+  Settings,
+  FileCode,
+  CheckCheck,
+  XSquare,
+  ArrowLeftRight,
+} from "lucide-react";
 import { UploadedFile } from "../types";
 
 interface ZipInspectorProps {
@@ -153,9 +170,43 @@ export default function ZipInspector({
     }
   };
 
-  // Global selections
+  // Global bulk actions
   const selectAll = (select: boolean) => {
-    const updated = files.map((f) => ({ ...f, selected: select }));
+    if (searchTerm.trim()) {
+      const filteredPaths = new Set(filteredFiles.map((f) => f.path));
+      const updated = files.map((f) =>
+        filteredPaths.has(f.path) ? { ...f, selected: select } : f
+      );
+      onFilesChanged(updated);
+    } else {
+      const updated = files.map((f) => ({ ...f, selected: select }));
+      onFilesChanged(updated);
+    }
+  };
+
+  const invertSelection = () => {
+    if (searchTerm.trim()) {
+      const filteredPaths = new Set(filteredFiles.map((f) => f.path));
+      const updated = files.map((f) =>
+        filteredPaths.has(f.path) ? { ...f, selected: !f.selected } : f
+      );
+      onFilesChanged(updated);
+    } else {
+      const updated = files.map((f) => ({ ...f, selected: !f.selected }));
+      onFilesChanged(updated);
+    }
+  };
+
+  const selectOnlyCodeFiles = () => {
+    const codeExtensions = [
+      "ts", "tsx", "js", "jsx", "json", "html", "css", "scss",
+      "py", "go", "rs", "java", "c", "cpp", "h", "md", "sh", "yaml", "yml"
+    ];
+    const updated = files.map((f) => {
+      const ext = f.path.split(".").pop()?.toLowerCase() || "";
+      const isCode = codeExtensions.includes(ext) || f.path.includes(".env") || f.path.includes(".gitignore");
+      return { ...f, selected: isCode };
+    });
     onFilesChanged(updated);
   };
 
@@ -201,39 +252,69 @@ export default function ZipInspector({
         </div>
       </div>
 
-      {/* Toolbar / Search */}
-      <div className="p-3 border-b border-stone-100 dark:border-stone-800/80 shrink-0 flex flex-col md:flex-row gap-2 items-center justify-between">
+      {/* Toolbar / Search & Bulk Actions Menu */}
+      <div className="p-3 border-b border-stone-100 dark:border-stone-800/80 shrink-0 flex flex-col md:flex-row gap-2.5 items-center justify-between bg-stone-50/40 dark:bg-stone-850/40">
         <div className="relative w-full md:max-w-xs">
           <input
             type="text"
             placeholder="Search files..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-1.5 bg-stone-50 dark:bg-stone-850 border border-stone-200 dark:border-stone-700 rounded-lg text-xs focus:bg-white dark:focus:bg-stone-900 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 dark:text-stone-100 transition"
+            className="w-full pl-9 pr-4 py-1.5 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 dark:text-stone-100 transition"
           />
           <Search className="w-3.5 h-3.5 text-stone-400 dark:text-stone-500 absolute left-3 top-1/2 -translate-y-1/2" />
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto justify-center md:justify-end">
+        {/* Bulk Action Button Group */}
+        <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto justify-start md:justify-end">
+          <span className="text-[10px] uppercase tracking-wider font-bold text-stone-400 dark:text-stone-500 mr-1 hidden sm:inline-flex items-center gap-1">
+            <CheckCheck className="w-3.5 h-3.5 text-orange-500" />
+            Bulk Actions:
+          </span>
+
           <button
             onClick={() => selectAll(true)}
-            className="text-[11px] text-stone-600 dark:text-stone-300 hover:text-stone-950 dark:hover:text-stone-100 hover:bg-stone-50 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-700 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+            className="text-[11px] font-semibold text-stone-700 dark:text-stone-200 hover:text-stone-950 dark:hover:text-white bg-white dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 border border-stone-200 dark:border-stone-700 px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-2xs"
+            title={searchTerm ? "Select all visible searched files" : "Select all files in package"}
           >
+            <CheckSquare className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
             Select All
           </button>
+
           <button
             onClick={() => selectAll(false)}
-            className="text-[11px] text-stone-600 dark:text-stone-300 hover:text-stone-950 dark:hover:text-stone-100 hover:bg-stone-50 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-700 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+            className="text-[11px] font-semibold text-stone-700 dark:text-stone-200 hover:text-stone-950 dark:hover:text-white bg-white dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 border border-stone-200 dark:border-stone-700 px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-2xs"
+            title={searchTerm ? "Deselect all visible searched files" : "Deselect all files"}
           >
+            <XSquare className="w-3.5 h-3.5 text-stone-400" />
             Deselect All
           </button>
+
+          <button
+            onClick={invertSelection}
+            className="text-[11px] font-semibold text-stone-700 dark:text-stone-200 hover:text-stone-950 dark:hover:text-white bg-white dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 border border-stone-200 dark:border-stone-700 px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-2xs"
+            title="Invert current selection state"
+          >
+            <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
+            Invert Selection
+          </button>
+
+          <button
+            onClick={selectOnlyCodeFiles}
+            className="text-[11px] font-semibold text-purple-700 dark:text-purple-300 hover:text-purple-900 dark:hover:text-purple-200 bg-purple-50/80 dark:bg-purple-950/30 hover:bg-purple-100 border border-purple-200 dark:border-purple-800/50 px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-2xs"
+            title="Select source code & config files only (.ts, .js, .json, .md, etc.)"
+          >
+            <FileCode2 className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+            Code Files Only
+          </button>
+
           <button
             onClick={resetToDefaultIgnores}
             className="text-[11px] text-orange-700 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/20 border border-orange-200/50 dark:border-orange-900/30 bg-orange-50/20 dark:bg-orange-950/10 px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
             title="Reset global ignore patterns list to developer defaults"
           >
             <Layers className="w-3 h-3" />
-            Reset Defaults
+            Reset Ignores
           </button>
         </div>
       </div>

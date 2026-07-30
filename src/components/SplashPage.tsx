@@ -85,7 +85,7 @@ export default function SplashPage({ onEnter, hasSavedToken }: SplashPageProps) 
 
         <p className="text-sm sm:text-base text-stone-400 max-w-xl mt-6 leading-relaxed font-medium">
           Hestia is the dedicated code hearth designed to push entire workspace packages 
-          directly from any AI Studio or local device to GitHub in seconds. Equipped with a Gemini commit companion.
+          directly from any AI Studio or local device to GitHub in seconds.
         </p>
 
         {/* Enter Code Hearth Call To Action */}
@@ -144,12 +144,12 @@ export default function SplashPage({ onEnter, hasSavedToken }: SplashPageProps) 
               <div className="p-2.5 bg-orange-950/40 border border-orange-900/30 rounded-xl text-orange-500 w-fit mb-4">
                 <Sparkles className="w-5 h-5" />
               </div>
-              <h4 className="text-sm font-bold text-white group-hover:text-orange-400 transition-colors">Gemini Commit Engine</h4>
+              <h4 className="text-sm font-bold text-white group-hover:text-orange-400 transition-colors">Direct GitHub Publishing</h4>
               <p className="text-xs text-stone-400 mt-2 leading-relaxed">
-                Let Gemini inspect your modified files and brief notes to compile professional Git commit messages and generate premium <code className="bg-stone-950 text-stone-300 px-1 py-0.5 rounded font-mono">README.md</code> documentation.
+                Inspect modified files, customize commit details, and publish directly to public or private GitHub repositories seamlessly.
               </p>
             </div>
-            <span className="text-[10px] text-stone-600 font-mono mt-4 block">AI-DRIVEN PUBLISHING</span>
+            <span className="text-[10px] text-stone-600 font-mono mt-4 block">INSTANT PUBLISHING</span>
           </div>
 
         </div>
