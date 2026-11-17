@@ -59,3 +59,16 @@ export interface GithubCommit {
   html_url: string;
 }
 
+export interface WorkspaceDraft {
+  id: string;
+  name: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  createIfNotExist: boolean;
+  isPrivate: boolean;
+  authMode: AuthMode;
+  sshUrl: string;
+  commitMessage: string;
+  updatedAt: number;
+}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Github, Key, LogOut, CheckCircle2, Loader2, ArrowRight } from "lucide-react";
 import { GithubProfile } from "../types";
+import { GitHubConnectionStatus } from "./GitHubStatusBadge";
 
 interface AuthCardProps {
   onAuthenticated: (token: string, profile: GithubProfile | null) => void;
@@ -8,6 +9,8 @@ interface AuthCardProps {
   profile: GithubProfile | null;
   setToken: (token: string) => void;
   setProfile: (profile: GithubProfile | null) => void;
+  authStatus?: GitHubConnectionStatus;
+  onAuthStatusChange?: (status: GitHubConnectionStatus) => void;
 }
 
 export default function AuthCard({
@@ -16,23 +19,27 @@ export default function AuthCard({
   profile,
   setToken,
   setProfile,
+  authStatus,
+  onAuthStatusChange,
 }: AuthCardProps) {
   const [inputToken, setInputToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Read from localStorage on mount
     const savedToken = localStorage.getItem("hestia_github_token");
-    if (savedToken) {
+    if (savedToken && !profile && authStatus !== "checking") {
       setInputToken(savedToken);
       verifyToken(savedToken);
+    } else if (token) {
+      setInputToken(token);
     }
   }, []);
 
   const verifyToken = async (pat: string) => {
     setLoading(true);
     setError(null);
+    onAuthStatusChange?.("checking");
     try {
       const response = await fetch("/api/github/user", {
         method: "POST",
@@ -50,13 +57,14 @@ export default function AuthCard({
       setProfile(userProfile);
       localStorage.setItem("hestia_github_token", pat);
       onAuthenticated(pat, userProfile);
+      onAuthStatusChange?.("active");
     } catch (err: any) {
-      console.error(err);
       setError(err.message || "Invalid token or network error. Please verify and try again.");
       localStorage.removeItem("hestia_github_token");
       setToken("");
       setProfile(null);
       onAuthenticated("", null);
+      onAuthStatusChange?.("reauth");
     } finally {
       setLoading(false);
     }
@@ -74,6 +82,7 @@ export default function AuthCard({
     setToken("");
     setProfile(null);
     onAuthenticated("", null);
+    onAuthStatusChange?.("disconnected");
     setError(null);
   };
 
@@ -81,11 +90,12 @@ export default function AuthCard({
     const sshProfile: GithubProfile = {
       login: "ssh-deployment",
       name: "SSH Deployment Key User",
-      avatar_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+      avatar_url: "/favicon.svg",
       html_url: "https://github.com",
     };
     setProfile(sshProfile);
     onAuthenticated("", sshProfile);
+    onAuthStatusChange?.("active");
   };
 
   return (
@@ -98,9 +108,12 @@ export default function AuthCard({
           <div className="flex items-center gap-4">
             <div className="relative">
               <img
-                src={profile.avatar_url}
-                alt={profile.name}
+                src={profile.avatar_url || "/favicon.svg"}
+                alt={`GitHub profile avatar for ${profile.name || profile.login}`}
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.src = "/favicon.svg";
+                }}
                 className="w-14 h-14 rounded-full border-2 border-orange-500 shadow-sm object-cover"
               />
               <span className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-white dark:border-stone-900 rounded-full flex items-center justify-center">
@@ -109,7 +122,7 @@ export default function AuthCard({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-stone-900 dark:text-stone-100 leading-tight">{profile.name}</h3>
+                <h2 className="font-semibold text-stone-900 dark:text-stone-100 leading-tight">{profile.name}</h2>
                 <span className="text-xs text-orange-600 dark:text-orange-400 font-mono bg-orange-50 dark:bg-orange-950/20 px-2 py-0.5 rounded-full border border-orange-100 dark:border-orange-900/30">
                   {profile.login === "ssh-deployment" ? "SSH Remote Mode" : "Hearth Connected"}
                 </span>
@@ -144,7 +157,7 @@ export default function AuthCard({
               <Key className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Connect your GitHub Hearth</h3>
+              <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Connect your GitHub Hearth</h2>
               <p className="text-sm text-stone-500 dark:text-stone-400 leading-relaxed mt-1">
                 To securely push code packages, Hestia supports GitHub Personal Access Tokens (PAT) and SSH Deployment Keys for SSH Remote URLs.
               </p>
@@ -160,7 +173,7 @@ export default function AuthCard({
                 <input
                   id="pat"
                   type="password"
-                  placeholder="ghp_xxxxxxxxxxxx"
+                  placeholder="Enter your GitHub Personal Access Token"
                   value={inputToken}
                   onChange={(e) => setInputToken(e.target.value)}
                   disabled={loading}
@@ -182,7 +195,7 @@ export default function AuthCard({
                   href="https://github.com/settings/tokens/new?scopes=repo,write:repo_hook&description=Hestia%20Code%20Hearth"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-350 underline font-medium"
+                  className="text-xs text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 underline font-medium"
                 >
                   Create a PAT on GitHub with "repo" scope →
                 </a>
@@ -198,7 +211,7 @@ export default function AuthCard({
               <button
                 type="submit"
                 disabled={loading || !inputToken.trim()}
-                className="w-full sm:w-auto px-5 py-2.5 bg-stone-900 dark:bg-stone-800 hover:bg-stone-850 dark:hover:bg-stone-700 text-white font-medium text-sm rounded-xl flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:hover:bg-stone-900 dark:disabled:bg-stone-800 transition cursor-pointer"
+                className="w-full sm:w-auto px-5 py-2.5 bg-stone-900 dark:bg-stone-800 hover:bg-stone-800 dark:hover:bg-stone-700 text-white font-medium text-sm rounded-xl flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:hover:bg-stone-900 dark:disabled:bg-stone-800 transition cursor-pointer"
               >
                 {loading ? (
                   <>

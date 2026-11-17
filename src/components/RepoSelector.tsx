@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   GitBranch,
   Shield,
@@ -72,7 +72,7 @@ export default function RepoSelector({
   const [selectedTab, setSelectedTab] = useState<"existing" | "create" | "ssh">(
     authMode === "ssh" ? "ssh" : createIfNotExist ? "create" : "existing"
   );
-  const [newRepoName, setNewRepoName] = useState("");
+  const [newRepoName, setNewRepoName] = useState(() => (createIfNotExist ? repo : ""));
   const [showKeyText, setShowKeyText] = useState(false);
 
   // SSH Key Manager & Connection Validation State
@@ -82,6 +82,8 @@ export default function RepoSelector({
   const [generatingKey, setGeneratingKey] = useState(false);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [confirmClearKey, setConfirmClearKey] = useState(false);
+  const noticeTimerRef = useRef<number | null>(null);
 
   // SSH Connectivity Validation State
   const [testingSsh, setTestingSsh] = useState(false);
@@ -91,9 +93,33 @@ export default function RepoSelector({
     details?: string;
   } | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (authMode === "ssh") {
+      setSelectedTab("ssh");
+    } else if (createIfNotExist) {
+      setSelectedTab("create");
+      setNewRepoName(repo);
+    } else if (selectedTab === "ssh" || selectedTab === "create") {
+      setSelectedTab("existing");
+    }
+  }, [authMode, createIfNotExist]);
+
+  useEffect(() => {
+    if (createIfNotExist) {
+      setNewRepoName(repo);
+    }
+  }, [createIfNotExist, repo]);
+
   const showNotice = (msg: string) => {
     setCopyNotice(msg);
-    setTimeout(() => setCopyNotice(null), 3500);
+    if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setCopyNotice(null), 3500);
   };
 
   const handleTestSshConnection = async () => {
@@ -187,19 +213,23 @@ export default function RepoSelector({
       const repoData: RepoOption[] = await response.json();
       setRepos(repoData);
       
-      // Default owner to current user
-      if (profile?.login) {
+      // Default owner to current user only if draft didn't already supply one
+      if (profile?.login && !owner) {
         setOwner(profile.login);
       }
 
-      // Select first repo as default if not currently selected
-      if (repoData.length > 0 && !repo && selectedTab === "existing") {
-        const firstRepo = repoData[0];
-        setRepo(firstRepo.name);
-        setBranch(firstRepo.default_branch || "main");
+      // Preserve restored draft repo & branch if present in user's repository list
+      if (repoData.length > 0 && selectedTab === "existing") {
+        const matched = repo ? repoData.find((r) => r.name === repo) : undefined;
+        if (!matched) {
+          const firstRepo = repoData[0];
+          setRepo(firstRepo.name);
+          if (!branch) {
+            setBranch(firstRepo.default_branch || "main");
+          }
+        }
       }
     } catch (err: any) {
-      console.error(err);
       setError(err.message || "An error occurred while communicating with GitHub.");
     } finally {
       setLoading(false);
@@ -263,7 +293,6 @@ export default function RepoSelector({
 
       showNotice("New SSH key pair generated and saved securely in browser storage!");
     } catch (err: any) {
-      console.error("Key generation failed:", err);
       setKeyError(err.message || "Failed to generate SSH keypair");
     } finally {
       setGeneratingKey(false);
@@ -297,13 +326,16 @@ export default function RepoSelector({
   };
 
   const handleClearKey = () => {
-    if (window.confirm("Are you sure you want to clear your saved local SSH key pair?")) {
-      setDeployKey("");
-      setPublicKey("");
-      localStorage.removeItem("hestia_ssh_key");
-      localStorage.removeItem("hestia_ssh_pubkey");
-      showNotice("Local SSH key pair cleared.");
+    if (!confirmClearKey) {
+      setConfirmClearKey(true);
+      return;
     }
+    setDeployKey("");
+    setPublicKey("");
+    setConfirmClearKey(false);
+    localStorage.removeItem("hestia_ssh_key");
+    localStorage.removeItem("hestia_ssh_pubkey");
+    showNotice("Local SSH key pair cleared.");
   };
 
   const handleRepoSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -332,10 +364,10 @@ export default function RepoSelector({
       
       {/* Mode selection tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-3 border-b border-stone-100 dark:border-stone-800/80">
-        <h3 className="font-semibold text-stone-900 dark:text-stone-100 flex items-center gap-2">
+        <h2 className="font-semibold text-stone-900 dark:text-stone-100 flex items-center gap-2">
           <GitBranch className="w-5 h-5 text-orange-500" />
           Target Repository
-        </h3>
+        </h2>
 
         {/* 3 Mode Tabs */}
         <div className="flex items-center gap-1 bg-stone-100 dark:bg-stone-800/70 p-1 rounded-xl text-xs">
@@ -506,13 +538,13 @@ export default function RepoSelector({
           </div>
 
           {/* ---------------- Dedicated SSH Key Management UI Card ---------------- */}
-          <div className="mt-6 border border-stone-200 dark:border-stone-800 rounded-2xl p-5 bg-stone-50/50 dark:bg-stone-850/40 space-y-4">
+          <div className="mt-6 border border-stone-200 dark:border-stone-800 rounded-2xl p-5 bg-stone-50/50 dark:bg-stone-800/40 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-200/60 dark:border-stone-800">
               <div className="flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-amber-500" />
-                <h4 className="text-xs font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300">
                   Local SSH Key Management
-                </h4>
+                </h3>
               </div>
 
               {/* Security & Status Badge */}
@@ -568,14 +600,36 @@ export default function RepoSelector({
               </button>
 
               {deployKey && (
-                <button
-                  type="button"
-                  onClick={handleClearKey}
-                  className="px-3 py-1.5 text-xs text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition flex items-center gap-1.5 font-medium cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Clear Saved Key
-                </button>
+                <div className="flex items-center gap-2">
+                  {confirmClearKey ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleClearKey}
+                        className="px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded-lg transition flex items-center gap-1.5 font-semibold cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Confirm Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmClearKey(false)}
+                        className="px-2.5 py-1.5 text-xs text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 rounded-lg transition cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleClearKey}
+                      className="px-3 py-1.5 text-xs text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition flex items-center gap-1.5 font-medium cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Clear Saved Key
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -591,7 +645,7 @@ export default function RepoSelector({
                   <button
                     type="button"
                     onClick={handleCopyPublicKey}
-                    className="text-xs px-2.5 py-1 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-750 text-stone-700 dark:text-stone-200 rounded-lg transition flex items-center gap-1 font-mono cursor-pointer"
+                    className="text-xs px-2.5 py-1 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 rounded-lg transition flex items-center gap-1 font-mono cursor-pointer"
                   >
                     <Copy className="w-3.5 h-3.5 text-amber-500" />
                     Copy Public Key
@@ -697,7 +751,7 @@ export default function RepoSelector({
           <div className="p-4 bg-orange-50/30 dark:bg-orange-950/10 border border-orange-100/50 dark:border-orange-900/20 rounded-xl flex items-start gap-3">
             <FolderPlus className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
             <div className="text-xs leading-relaxed text-stone-600 dark:text-stone-400">
-              <span className="font-semibold text-orange-800 dark:text-orange-450">New Repository Mode:</span> Hestia will automatically provision this repository for you on GitHub when you click push.
+              <span className="font-semibold text-orange-800 dark:text-orange-400">New Repository Mode:</span> Hestia will automatically provision this repository for you on GitHub when you click push.
             </div>
           </div>
 
@@ -720,7 +774,7 @@ export default function RepoSelector({
               </label>
               <input
                 type="text"
-                placeholder="e.g. my-awesome-project"
+                placeholder="repository-name"
                 value={newRepoName}
                 onChange={handleNewRepoNameChange}
                 className="w-full px-3.5 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 focus:bg-white dark:focus:bg-stone-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 rounded-xl text-sm font-mono text-stone-800 dark:text-stone-100 transition"
@@ -752,7 +806,7 @@ export default function RepoSelector({
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
                     !isPrivate
                       ? "bg-stone-900 dark:bg-stone-700 border-stone-900 dark:border-stone-700 text-white"
-                      : "bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-750"
+                      : "bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700"
                   }`}
                 >
                   <Globe className="w-4 h-4" />
@@ -764,7 +818,7 @@ export default function RepoSelector({
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
                     isPrivate
                       ? "bg-stone-900 dark:bg-stone-700 border-stone-900 dark:border-stone-700 text-white"
-                      : "bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-750"
+                      : "bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700"
                   }`}
                 >
                   <Shield className="w-4 h-4" />

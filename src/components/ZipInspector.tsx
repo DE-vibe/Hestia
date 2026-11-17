@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   FolderTree,
   Search,
@@ -43,16 +43,29 @@ export default function ZipInspector({
       .filter((p) => p.length > 0);
   };
 
-  // Helper to check if file path matches any of the ignore patterns
-  const matchesAnyPattern = (path: string, patterns: string[]) => {
-    const pathLower = path.toLowerCase();
+  // Segment-aware check so "out" doesn't match "layout.tsx" or "about.tsx"
+  const matchesAnyPattern = (filePath: string, patterns: string[]) => {
+    const normalizedPath = filePath.toLowerCase().replace(/\\/g, "/");
+    const segments = normalizedPath.split("/").filter(Boolean);
     return patterns.some((p) => {
-      const pLower = p.toLowerCase();
+      const pLower = p.toLowerCase().replace(/^\/+|\/+$/g, "");
+      if (!pLower) return false;
       if (pLower.startsWith("*.")) {
         const ext = pLower.substring(2);
-        return pathLower.endsWith("." + ext);
+        return normalizedPath.endsWith("." + ext);
       }
-      return pathLower.includes(pLower);
+      if (pLower.includes("/")) {
+        return (
+          normalizedPath === pLower ||
+          normalizedPath.startsWith(pLower + "/") ||
+          normalizedPath.includes("/" + pLower + "/") ||
+          normalizedPath.endsWith("/" + pLower)
+        );
+      }
+      if (pLower === ".env") {
+        return segments.some((seg) => seg === ".env" || seg.startsWith(".env."));
+      }
+      return segments.some((seg) => seg === pLower);
     });
   };
 
@@ -88,18 +101,6 @@ export default function ZipInspector({
     });
     onFilesChanged(updated);
   };
-
-  // Auto-apply custom ignore patterns exactly once when a new ZIP package is loaded
-  useEffect(() => {
-    if (files.length > 0) {
-      const patterns = parsePatterns(ignorePatterns);
-      const updated = files.map((f) => {
-        const isIgnored = matchesAnyPattern(f.path, patterns);
-        return { ...f, selected: !isIgnored };
-      });
-      onFilesChanged(updated);
-    }
-  }, [zipName]);
 
   // Calculate file count and total size of selected files
   const stats = useMemo(() => {
@@ -160,12 +161,15 @@ export default function ZipInspector({
     return files.filter((f) => f.path.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [files, searchTerm]);
 
-  // Handle individual toggle
+  // Handle individual toggle immutably
   const toggleFile = (index: number) => {
-    const updated = [...files];
-    const absoluteIndex = files.findIndex((f) => f.path === filteredFiles[index].path);
+    const target = filteredFiles[index];
+    if (!target) return;
+    const absoluteIndex = files.findIndex((f) => f.path === target.path);
     if (absoluteIndex !== -1) {
-      updated[absoluteIndex].selected = !updated[absoluteIndex].selected;
+      const updated = files.map((f, idx) =>
+        idx === absoluteIndex ? { ...f, selected: !f.selected } : f
+      );
       onFilesChanged(updated);
     }
   };
@@ -213,13 +217,13 @@ export default function ZipInspector({
   return (
     <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm overflow-hidden flex flex-col h-[520px]">
       {/* Header Banner */}
-      <div className="bg-stone-50 dark:bg-stone-850 border-b border-stone-100 dark:border-stone-800/80 p-4 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className="bg-stone-50 dark:bg-stone-800/70 border-b border-stone-100 dark:border-stone-800/80 p-4 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-orange-100 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-900/30 rounded-xl text-orange-600 dark:text-orange-400">
             <FolderTree className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="font-semibold text-stone-950 dark:text-stone-50 text-sm leading-none">Hearth Code Package:</h4>
+            <h2 className="font-semibold text-stone-950 dark:text-stone-50 text-sm leading-none">Hearth Code Package:</h2>
             <p className="text-xs text-stone-500 dark:text-stone-400 font-mono mt-1 break-all">{zipName}</p>
           </div>
         </div>
@@ -253,7 +257,7 @@ export default function ZipInspector({
       </div>
 
       {/* Toolbar / Search & Bulk Actions Menu */}
-      <div className="p-3 border-b border-stone-100 dark:border-stone-800/80 shrink-0 flex flex-col md:flex-row gap-2.5 items-center justify-between bg-stone-50/40 dark:bg-stone-850/40">
+      <div className="p-3 border-b border-stone-100 dark:border-stone-800/80 shrink-0 flex flex-col md:flex-row gap-2.5 items-center justify-between bg-stone-50/40 dark:bg-stone-800/40">
         <div className="relative w-full md:max-w-xs">
           <input
             type="text"
@@ -320,7 +324,7 @@ export default function ZipInspector({
       </div>
 
       {/* Global Ignore Patterns */}
-      <div className="px-4 py-2.5 bg-stone-50 dark:bg-stone-850 border-b border-stone-100 dark:border-stone-800/80 shrink-0 flex flex-col md:flex-row gap-2 items-center justify-between">
+      <div className="px-4 py-2.5 bg-stone-50 dark:bg-stone-800/70 border-b border-stone-100 dark:border-stone-800/80 shrink-0 flex flex-col md:flex-row gap-2 items-center justify-between">
         <div className="flex items-center gap-2 w-full">
           <span className="text-xs font-semibold text-stone-600 dark:text-stone-400 whitespace-nowrap flex items-center gap-1">
             <Settings className="w-3.5 h-3.5 text-stone-500" />
@@ -396,9 +400,9 @@ export default function ZipInspector({
       </div>
 
       {/* Bottom Info Bar */}
-      <div className="bg-stone-50 dark:bg-stone-850 px-4 py-3 border-t border-stone-200 dark:border-stone-800 shrink-0 text-[10px] text-stone-500 dark:text-stone-400 flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
+      <div className="bg-stone-50 dark:bg-stone-800/70 px-4 py-3 border-t border-stone-200 dark:border-stone-800 shrink-0 text-[10px] text-stone-500 dark:text-stone-400 flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
         <span className="flex items-center gap-1.5 justify-center sm:justify-start">
-          <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-450 shrink-0" />
+          <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
           Files with a checked box will be committed. Unchecked files will be excluded.
         </span>
         <span className="font-mono text-stone-400 dark:text-stone-500 shrink-0">JSZip Parser v3.10</span>

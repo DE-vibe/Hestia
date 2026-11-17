@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import os from "os";
+import crypto from "crypto";
 import { spawnSync } from "child_process";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
@@ -110,7 +111,9 @@ app.post("/api/github/commits", async (req, res) => {
   }
 
   try {
-    const commits = await fetchGithub(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=5`, token);
+    const encodedOwner = encodeURIComponent(String(owner).trim());
+    const encodedRepo = encodeURIComponent(String(repo).trim());
+    const commits = await fetchGithub(`https://api.github.com/repos/${encodedOwner}/${encodedRepo}/commits?per_page=5`, token);
     const commitList = commits.map((item: any) => ({
       sha: item.sha,
       message: item.commit.message,
@@ -223,23 +226,40 @@ app.post("/api/github/push", async (req, res) => {
       runGit(["config", "user.name", "Hestia Code Hearth"]);
       runGit(["config", "user.email", "hestia@codehearth.local"]);
 
-      // 2. Write all files to temp dir
+      // 2. Write all files safely inside tempDir (prevent path traversal and .git overwrite)
+      const resolvedTempDir = path.resolve(tempDir);
+      let writtenFilesCount = 0;
+
       for (const file of files) {
-        if (!file.path || file.content === undefined) continue;
-        const filePath = path.join(tempDir, file.path);
-        const fileDir = path.dirname(filePath);
+        if (!file?.path || file.content === undefined) continue;
+        const normalizedRelPath = String(file.path)
+          .replace(/\\/g, "/")
+          .replace(/^\/+/, "");
+        if (!normalizedRelPath || normalizedRelPath === ".git" || normalizedRelPath.startsWith(".git/") || normalizedRelPath.includes("/.git/")) {
+          continue;
+        }
+        const resolvedFilePath = path.resolve(resolvedTempDir, normalizedRelPath);
+        if (!resolvedFilePath.startsWith(resolvedTempDir + path.sep)) {
+          continue;
+        }
+        const fileDir = path.dirname(resolvedFilePath);
         fs.mkdirSync(fileDir, { recursive: true });
         const buffer = Buffer.from(file.content, "base64");
-        fs.writeFileSync(filePath, buffer);
+        fs.writeFileSync(resolvedFilePath, buffer);
+        writtenFilesCount++;
+      }
+
+      if (writtenFilesCount === 0) {
+        return res.status(400).json({ error: "No valid files remained after path validation." });
       }
 
       // 3. Add files and commit
       runGit(["add", "-A"]);
-      try {
-        runGit(["commit", "-m", commitMessage]);
-      } catch (commitErr: any) {
-        console.log("Git commit output info:", commitErr.message);
+      const statusOut = runGit(["status", "--porcelain"]);
+      if (!statusOut) {
+        return res.status(400).json({ error: "No files were staged to commit." });
       }
+      runGit(["commit", "-m", commitMessage]);
 
       // 4. Add remote URL
       runGit(["remote", "add", "origin", targetSshUrl]);
@@ -256,7 +276,7 @@ app.post("/api/github/push", async (req, res) => {
               auto_init: false,
             }),
           });
-        } catch (e) {
+        } catch {
           // Repo might already exist, ignore
         }
       }
@@ -272,10 +292,13 @@ app.post("/api/github/push", async (req, res) => {
         // ignore
       }
 
+      const hostMatch = targetSshUrl.match(/^(?:ssh:\/\/)?git@([^:\/]+)/i);
+      const webHost = hostMatch ? hostMatch[1] : "github.com";
+
       return res.json({
         success: true,
-        repositoryUrl: `https://github.com/${targetOwner}/${targetRepo}`,
-        commitUrl: `https://github.com/${targetOwner}/${targetRepo}/commit/${commitSha}`,
+        repositoryUrl: `https://${webHost}/${encodeURIComponent(targetOwner)}/${encodeURIComponent(targetRepo)}`,
+        commitUrl: `https://${webHost}/${encodeURIComponent(targetOwner)}/${encodeURIComponent(targetRepo)}/commit/${encodeURIComponent(commitSha)}`,
         branch: targetBranch,
         sha: commitSha,
       });
@@ -301,18 +324,25 @@ app.post("/api/github/push", async (req, res) => {
     return res.status(400).json({ error: "Missing required parameters for GitHub token push" });
   }
 
+  const cleanOwner = String(owner).trim();
+  const cleanRepo = String(repo).trim();
+  const cleanBranch = String(branch).trim();
+  const encodedOwner = encodeURIComponent(cleanOwner);
+  const encodedRepo = encodeURIComponent(cleanRepo);
+  const encodeBranchPath = (b: string) => b.split("/").map(encodeURIComponent).join("/");
+
   try {
     // Step A: Ensure Repository Exists or Create it
     let repoInfo;
     try {
-      repoInfo = await fetchGithub(`https://api.github.com/repos/${owner}/${repo}`, token);
+      repoInfo = await fetchGithub(`https://api.github.com/repos/${encodedOwner}/${encodedRepo}`, token);
     } catch (err: any) {
       if (err.status === 404 && createIfNotExist) {
-        console.log(`Repository ${owner}/${repo} does not exist. Creating...`);
+        console.log(`Repository ${cleanOwner}/${cleanRepo} does not exist. Creating...`);
         repoInfo = await fetchGithub("https://api.github.com/user/repos", token, {
           method: "POST",
           body: JSON.stringify({
-            name: repo,
+            name: cleanRepo,
             private: isPrivate ?? false,
             description: "Codebase pushed via Hestia Code Hearth",
             auto_init: false,
@@ -323,7 +353,8 @@ app.post("/api/github/push", async (req, res) => {
       }
     }
 
-    const actualBranch = branch || repoInfo.default_branch || "main";
+    const actualBranch = cleanBranch || repoInfo.default_branch || "main";
+    const encodedBranchRef = encodeBranchPath(actualBranch);
 
     // Step B: Fetch latest commit of the target branch (if any)
     let parentCommitSha: string | null = null;
@@ -331,7 +362,10 @@ app.post("/api/github/push", async (req, res) => {
     let isBrandNewBranch = false;
 
     try {
-      const branchInfo = await fetchGithub(`https://api.github.com/repos/${owner}/${repo}/branches/${actualBranch}`, token);
+      const branchInfo = await fetchGithub(
+        `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/branches/${encodedBranchRef}`,
+        token
+      );
       parentCommitSha = branchInfo.commit.sha;
       baseTreeSha = branchInfo.commit.commit.tree.sha;
     } catch (err: any) {
@@ -344,30 +378,59 @@ app.post("/api/github/push", async (req, res) => {
       }
     }
 
-    // Step C: Create blobs on GitHub in parallel batches to prevent rate limiting
-    console.log(`Creating blobs for ${files.length} files...`);
-    const blobPromises = files.map(async (file: any) => {
-      try {
-        const blobRes = await fetchGithub(`https://api.github.com/repos/${owner}/${repo}/git/blobs`, token, {
-          method: "POST",
-          body: JSON.stringify({
-            content: file.content,
-            encoding: "base64",
-          }),
-        });
-        return {
-          path: file.path,
-          mode: "100644", // standard file mode
-          type: "blob",
-          sha: blobRes.sha,
-        };
-      } catch (err: any) {
-        console.error(`Error creating blob for ${file.path}:`, err);
-        throw new Error(`Failed to create blob for ${file.path}: ${err.message}`);
+    // Deduplicate and sanitize valid file paths (last entry wins)
+    const sanitizedFilesMap = new Map<string, { path: string; content: string }>();
+    for (const file of files) {
+      if (!file?.path || file.content === undefined) continue;
+      const normalizedPath = String(file.path).replace(/\\/g, "/").replace(/^\/+/, "");
+      if (!normalizedPath || normalizedPath.includes("..") || normalizedPath === ".git" || normalizedPath.startsWith(".git/")) {
+        continue;
       }
-    });
+      sanitizedFilesMap.set(normalizedPath, {
+        path: normalizedPath,
+        content: String(file.content),
+      });
+    }
+    const validFiles = Array.from(sanitizedFilesMap.values());
+    if (validFiles.length === 0) {
+      return res.status(400).json({ error: "No valid files to commit." });
+    }
 
-    const treeItems = await Promise.all(blobPromises);
+    // Step C: Create blobs on GitHub in bounded batches to prevent rate limiting
+    console.log(`Creating blobs for ${validFiles.length} files...`);
+    const CONCURRENCY_LIMIT = 6;
+    const treeItems: Array<{ path: string; mode: string; type: string; sha: string }> = [];
+
+    for (let i = 0; i < validFiles.length; i += CONCURRENCY_LIMIT) {
+      const batch = validFiles.slice(i, i + CONCURRENCY_LIMIT);
+      const batchResults = await Promise.all(
+        batch.map(async (file) => {
+          try {
+            const blobRes = await fetchGithub(
+              `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/git/blobs`,
+              token,
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  content: file.content,
+                  encoding: "base64",
+                }),
+              }
+            );
+            return {
+              path: file.path,
+              mode: "100644",
+              type: "blob",
+              sha: blobRes.sha,
+            };
+          } catch (err: any) {
+            console.error(`Error creating blob for ${file.path}:`, err);
+            throw new Error(`Failed to create blob for ${file.path}: ${err.message}`);
+          }
+        })
+      );
+      treeItems.push(...batchResults);
+    }
 
     // Step D: Create Git Tree
     console.log(`Creating git tree for ${treeItems.length} elements...`);
@@ -378,10 +441,14 @@ app.post("/api/github/push", async (req, res) => {
       treeRequestBody.base_tree = baseTreeSha;
     }
 
-    const newTree = await fetchGithub(`https://api.github.com/repos/${owner}/${repo}/git/trees`, token, {
-      method: "POST",
-      body: JSON.stringify(treeRequestBody),
-    });
+    const newTree = await fetchGithub(
+      `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/git/trees`,
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify(treeRequestBody),
+      }
+    );
 
     // Step E: Create Commit
     console.log(`Creating commit: "${commitMessage}"...`);
@@ -393,37 +460,47 @@ app.post("/api/github/push", async (req, res) => {
       commitRequestBody.parents = [parentCommitSha];
     }
 
-    const newCommit = await fetchGithub(`https://api.github.com/repos/${owner}/${repo}/git/commits`, token, {
-      method: "POST",
-      body: JSON.stringify(commitRequestBody),
-    });
+    const newCommit = await fetchGithub(
+      `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/git/commits`,
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify(commitRequestBody),
+      }
+    );
 
     // Step F: Update Branch Reference
     console.log(`Updating ref for branch refs/heads/${actualBranch} to commit ${newCommit.sha}...`);
     if (isBrandNewBranch) {
-      // Create new reference
-      await fetchGithub(`https://api.github.com/repos/${owner}/${repo}/git/refs`, token, {
-        method: "POST",
-        body: JSON.stringify({
-          ref: `refs/heads/${actualBranch}`,
-          sha: newCommit.sha,
-        }),
-      });
+      await fetchGithub(
+        `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/git/refs`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ref: `refs/heads/${actualBranch}`,
+            sha: newCommit.sha,
+          }),
+        }
+      );
     } else {
-      // Update existing reference
-      await fetchGithub(`https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${actualBranch}`, token, {
-        method: "PATCH",
-        body: JSON.stringify({
-          sha: newCommit.sha,
-          force: true,
-        }),
-      });
+      await fetchGithub(
+        `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/git/refs/heads/${encodedBranchRef}`,
+        token,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            sha: newCommit.sha,
+            force: true,
+          }),
+        }
+      );
     }
 
     res.json({
       success: true,
-      repositoryUrl: `https://github.com/${owner}/${repo}`,
-      commitUrl: `https://github.com/${owner}/${repo}/commit/${newCommit.sha}`,
+      repositoryUrl: `https://github.com/${encodedOwner}/${encodedRepo}`,
+      commitUrl: `https://github.com/${encodedOwner}/${encodedRepo}/commit/${encodeURIComponent(newCommit.sha)}`,
       branch: actualBranch,
       sha: newCommit.sha,
     });
@@ -438,7 +515,8 @@ app.post("/api/github/push", async (req, res) => {
 
 // 5. Generate SSH Key Pair for Deploy Keys
 app.post("/api/ssh/generate-keypair", (req, res) => {
-  const comment = req.body?.comment || "hestia-deploy-key";
+  const rawComment = typeof req.body?.comment === "string" ? req.body.comment : "hestia-deploy-key";
+  const comment = rawComment.replace(/[\r\n]/g, "").slice(0, 128) || "hestia-deploy-key";
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hestia-sshgen-"));
   const keyPath = path.join(tempDir, "id_ed25519");
 
@@ -458,7 +536,6 @@ app.post("/api/ssh/generate-keypair", (req, res) => {
   } catch (err: any) {
     console.error("ssh-keygen execution failed, falling back to RSA:", err);
     try {
-      const crypto = require("crypto");
       const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
         modulusLength: 2048,
         publicKeyEncoding: { type: "pkcs1", format: "pem" },
@@ -466,7 +543,7 @@ app.post("/api/ssh/generate-keypair", (req, res) => {
       });
       const formattedPub = `ssh-rsa ${Buffer.from(publicKey).toString("base64")} ${comment}`;
       res.json({ privateKey, publicKey: formattedPub, comment });
-    } catch (fallbackErr: any) {
+    } catch {
       res.status(500).json({ error: "Failed to generate SSH keypair" });
     }
   } finally {
@@ -684,8 +761,70 @@ JSON output structure:
   });
 });
 
+// Dynamic SEO crawl & icon endpoints (absolute host-resolved URLs)
+function resolveOrigin(req: express.Request): string {
+  if (process.env.APP_URL) {
+    return process.env.APP_URL.replace(/\/+$/, "");
+  }
+  const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+  const host = req.get("host") || `localhost:${PORT}`;
+  return `${proto}://${host}`;
+}
+
+app.get("/sitemap.xml", (req, res) => {
+  const origin = resolveOrigin(req);
+  const lastmod = new Date().toISOString().split("T")[0];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${origin}/</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>${origin}/workspace</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>${origin}/guide</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+</urlset>
+`;
+  res.type("application/xml; charset=utf-8").send(xml);
+});
+
+app.get("/robots.txt", (req, res) => {
+  const origin = resolveOrigin(req);
+  res
+    .type("text/plain; charset=utf-8")
+    .send(`User-agent: *\nAllow: /\n\nSitemap: ${origin}/sitemap.xml\n`);
+});
+
+app.get("/favicon.ico", (_req, res) => {
+  const prodIcon = path.join(process.cwd(), "dist", "favicon.svg");
+  const devIcon = path.join(process.cwd(), "public", "favicon.svg");
+  const iconPath = fs.existsSync(prodIcon) ? prodIcon : devIcon;
+  if (fs.existsSync(iconPath)) {
+    return res.type("image/svg+xml").sendFile(iconPath);
+  }
+  res.status(204).end();
+});
+
+// Catch unmatched API routes with JSON 404
+app.all("/api/*", (_req, res) => {
+  res.status(404).json({ error: "API endpoint not found" });
+});
+
 // Serve frontend assets and bootstrap server
 async function bootstrap() {
+  const validRoutes = new Set(["/", "/splash", "/workspace", "/guide"]);
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -696,7 +835,9 @@ async function bootstrap() {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      const normalized = req.path.replace(/\/+$/, "") || "/";
+      const status = validRoutes.has(normalized) ? 200 : 404;
+      res.status(status).sendFile(path.join(distPath, "index.html"));
     });
   }
 

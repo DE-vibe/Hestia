@@ -1,0 +1,13 @@
+# Hestia Code Hearth
+
+> Hestia Code Hearth is a developer utility for pushing code packages and ZIP archives from AI Studio or any local device directly to GitHub repositories.
+
+## Key Pages
+- [Home](/): Overview of Hestia Code Hearth, 10-day free trial details, and key capabilities.
+- [Workspace](/workspace): Interactive workbench to connect GitHub (Personal Access Token or SSH Deploy Key), inspect and filter ZIP archives, generate commit messages and READMEs, and push commits directly to GitHub.
+- [Guide](/guide): Step-by-step documentation for exporting code packages, configuring GitHub credentials, and managing branches and SSH deploy keys.
+
+## Core Capabilities
+- Client-side ZIP inspection and smart filtering (`node_modules`, build artifacts, lockfiles).
+- Dual GitHub authentication via Personal Access Token (REST Git Trees API) or SSH Deploy Key.
+- Automated conventional commit message generation and README synthesis.

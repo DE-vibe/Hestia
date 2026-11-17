@@ -104,14 +104,15 @@ export default function IntroSplash({ onComplete }: IntroSplashProps) {
 
         {/* HESTIA in Strong Monumental Greekish font */}
         <div className="space-y-4">
-          <h1
+          <div
+            role="presentation"
             className="font-greek text-5xl sm:text-7xl font-black text-white tracking-[0.35em] uppercase leading-none select-none"
             style={{
               textShadow: "0 0 35px rgba(249, 115, 22, 0.25)",
             }}
           >
             Hestia
-          </h1>
+          </div>
           
           <div className="flex items-center justify-center gap-3 max-w-xs mx-auto">
             <div className="h-[1px] bg-gradient-to-r from-transparent to-amber-500/60 flex-1" />
@@ -122,12 +123,23 @@ export default function IntroSplash({ onComplete }: IntroSplashProps) {
           </div>
         </div>
 
-        {/* Automatic Cinematic Loader Status */}
-        <div className="mt-14 h-12 flex items-center justify-center">
+        {/* Automatic Cinematic Loader Status + Skip Button */}
+        <div className="mt-12 flex flex-col items-center justify-center gap-4">
           <div className="flex items-center gap-2 text-xs font-mono tracking-[0.25em] text-amber-500/80 animate-pulse uppercase">
             <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-ping" />
             Preparing the Code Hearth...
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setFading(true);
+              setTimeout(onComplete, 250);
+            }}
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-stone-900/80 hover:bg-stone-800 border border-stone-800 hover:border-amber-500/40 text-[11px] font-mono text-stone-400 hover:text-amber-300 transition cursor-pointer"
+          >
+            Skip Intro
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
 
       </div>

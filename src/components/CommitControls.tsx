@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   MessageSquare,
   Plus,
@@ -9,13 +9,53 @@ import {
   Github,
   CheckCircle2,
   FileCode,
-  Zap,
   Wand2,
   Sliders,
   RefreshCw,
-  Info,
+  Tag,
 } from "lucide-react";
 import { UploadedFile } from "../types";
+
+function utf8ToBase64(text: string): { base64: string; byteLength: number } {
+  const bytes = new TextEncoder().encode(text);
+  const CHUNK_SIZE = 0x8000;
+  const chunks: string[] = [];
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    const slice = bytes.subarray(i, i + CHUNK_SIZE);
+    chunks.push(String.fromCharCode(...slice));
+  }
+  return { base64: btoa(chunks.join("")), byteLength: bytes.length };
+}
+
+const CONVENTIONAL_COMMIT_TYPES = [
+  {
+    value: "feat",
+    label: "feat — New feature",
+    template: "feat: bootstrap workspace via Hestia Hearth",
+  },
+  {
+    value: "fix",
+    label: "fix — Bug fix",
+    template: "fix: resolve issue in codebase",
+  },
+  {
+    value: "docs",
+    label: "docs — Documentation",
+    template: "docs: update project documentation",
+  },
+  {
+    value: "chore",
+    label: "chore — Maintenance & chores",
+    template: "chore: update dependencies and configuration",
+  },
+  {
+    value: "style",
+    label: "style — Formatting & UI styling",
+    template: "style: refine code formatting and UI styles",
+  },
+] as const;
+
+type ConventionalType = (typeof CONVENTIONAL_COMMIT_TYPES)[number]["value"];
 
 interface CommitControlsProps {
   files: UploadedFile[];
@@ -24,6 +64,7 @@ interface CommitControlsProps {
   setCommitMessage: (msg: string) => void;
   token?: string;
   isPremium: boolean;
+  isTrialActive?: boolean;
   onUpgradeClick: () => void;
 }
 
@@ -34,6 +75,7 @@ export default function CommitControls({
   setCommitMessage,
   token,
   isPremium,
+  isTrialActive = true,
   onUpgradeClick,
 }: CommitControlsProps) {
   const [showAddReadme, setShowAddReadme] = useState(false);
@@ -48,19 +90,67 @@ export default function CommitControls({
   const [copilotSummary, setCopilotSummary] = useState<string | null>(null);
   const [prDescription, setPrDescription] = useState<string | null>(null);
   const [prAttachedNotice, setPrAttachedNotice] = useState(false);
+  const [copilotError, setCopilotError] = useState<string | null>(null);
+
+  const readmeTimerRef = useRef<number | null>(null);
+  const prTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (readmeTimerRef.current !== null) window.clearTimeout(readmeTimerRef.current);
+      if (prTimerRef.current !== null) window.clearTimeout(prTimerRef.current);
+    };
+  }, []);
+
+  const matchedType = CONVENTIONAL_COMMIT_TYPES.find((item) =>
+    new RegExp(`^${item.value}(\\([^)]*\\))?:`, "i").test(commitMessage.trim())
+  )?.value;
+
+  const [selectedCommitType, setSelectedCommitType] = useState<ConventionalType | "">(
+    matchedType || "feat"
+  );
+
+  const handleSelectCommitType = (nextType: ConventionalType | "") => {
+    setSelectedCommitType(nextType);
+    if (!nextType) return;
+
+    const entry = CONVENTIONAL_COMMIT_TYPES.find((item) => item.value === nextType);
+    if (!entry) return;
+
+    const trimmed = commitMessage.trim();
+    const isEmptyOrDefault =
+      !trimmed ||
+      CONVENTIONAL_COMMIT_TYPES.some((item) => item.template === trimmed);
+
+    if (isEmptyOrDefault) {
+      setCommitMessage(entry.template);
+      return;
+    }
+
+    const prefixMatch = trimmed.match(/^(feat|fix|docs|chore|style)(\([^)]*\))?:\s*(.*)$/is);
+    if (prefixMatch) {
+      const scope = prefixMatch[2] || "";
+      const rest = prefixMatch[3] || "";
+      setCommitMessage(rest ? `${nextType}${scope}: ${rest}` : entry.template);
+    } else {
+      setCommitMessage(`${nextType}: ${trimmed}`);
+    }
+  };
 
   const handleAddCustomReadme = () => {
     if (!customReadmeText.trim()) return;
-    const base64Content = btoa(unescape(encodeURIComponent(customReadmeText)));
-    onAddOrUpdateFile("README.md", base64Content, customReadmeText.length);
+    const { base64, byteLength } = utf8ToBase64(customReadmeText);
+    onAddOrUpdateFile("README.md", base64, byteLength);
     setReadmeSuccess(true);
     setShowAddReadme(false);
-    setTimeout(() => setReadmeSuccess(false), 5000);
+    if (readmeTimerRef.current !== null) window.clearTimeout(readmeTimerRef.current);
+    readmeTimerRef.current = window.setTimeout(() => setReadmeSuccess(false), 5000);
   };
 
   const handleSuggestCopilotCommit = async (overrideStyle?: "conventional" | "concise" | "detailed") => {
+    setCopilotError(null);
     if (files.length === 0) {
-      alert("Please upload or select at least one file to analyze with GitHub Copilot.");
+      setCopilotError("Please upload or select at least one file to analyze with GitHub Copilot.");
       return;
     }
 
@@ -99,9 +189,8 @@ export default function CommitControls({
       if (data.prDescription) {
         setPrDescription(data.prDescription);
       }
-    } catch (err) {
-      console.error("Copilot suggestion failed:", err);
-      alert("Could not generate Copilot commit message right now. Please try again or type manually.");
+    } catch {
+      setCopilotError("Could not generate Copilot commit message right now. Please try again or type manually.");
     } finally {
       setIsCopilotLoading(false);
     }
@@ -109,24 +198,25 @@ export default function CommitControls({
 
   const handleAttachPrDescription = () => {
     if (!prDescription) return;
-    const base64Content = btoa(unescape(encodeURIComponent(prDescription)));
-    onAddOrUpdateFile("PR_DESCRIPTION.md", base64Content, prDescription.length);
+    const { base64, byteLength } = utf8ToBase64(prDescription);
+    onAddOrUpdateFile("PR_DESCRIPTION.md", base64, byteLength);
     setPrAttachedNotice(true);
-    setTimeout(() => setPrAttachedNotice(false), 5000);
+    if (prTimerRef.current !== null) window.clearTimeout(prTimerRef.current);
+    prTimerRef.current = window.setTimeout(() => setPrAttachedNotice(false), 5000);
   };
 
   return (
     <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm p-6 space-y-5 relative overflow-hidden">
-      {/* Visual Gold/Orange accent if premium */}
-      {isPremium && (
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-orange-500 animate-pulse" />
+      {/* Visual Gold/Emerald accent if trial or premium */}
+      {(isTrialActive || isPremium) && (
+        <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${isTrialActive ? 'from-emerald-500 via-teal-400 to-emerald-500' : 'from-amber-500 via-yellow-400 to-orange-500'} animate-pulse`} />
       )}
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100 dark:border-stone-800">
-        <h3 className="font-semibold text-stone-900 dark:text-stone-100 flex items-center gap-2">
+        <h2 className="font-semibold text-stone-900 dark:text-stone-100 flex items-center gap-2">
           <MessageSquare className="w-5 h-5 text-orange-500" />
           Craft Commit Details
-        </h3>
+        </h2>
 
         {/* Tab Toggle: Standard vs Smart Commit (GitHub Copilot) */}
         <div className="inline-flex p-1 bg-stone-100 dark:bg-stone-800 rounded-xl border border-stone-200/80 dark:border-stone-700">
@@ -261,8 +351,8 @@ export default function CommitControls({
       )}
 
       {/* Commit message input area */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <label htmlFor="commit" className="block text-xs font-semibold text-stone-700 dark:text-stone-300">
             Commit Message
           </label>
@@ -284,6 +374,29 @@ export default function CommitControls({
           )}
         </div>
 
+        {/* Conventional Commit Type Preset Selector */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <label
+            htmlFor="commit-type-select"
+            className="text-[11px] font-medium text-stone-500 dark:text-stone-400 flex items-center gap-1.5 shrink-0"
+          >
+            <Tag className="w-3.5 h-3.5 text-orange-500" />
+            Commit Type:
+          </label>
+          <select
+            id="commit-type-select"
+            value={matchedType || selectedCommitType}
+            onChange={(e) => handleSelectCommitType(e.target.value as ConventionalType | "")}
+            className="flex-1 px-3 py-2 bg-stone-50 dark:bg-stone-800/80 border border-stone-200 dark:border-stone-700 focus:bg-white dark:focus:bg-stone-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 rounded-xl text-xs font-mono text-stone-800 dark:text-stone-100 transition cursor-pointer"
+          >
+            {CONVENTIONAL_COMMIT_TYPES.map((typeOption) => (
+              <option key={typeOption.value} value={typeOption.value}>
+                {typeOption.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <textarea
           id="commit"
           rows={4}
@@ -299,7 +412,12 @@ export default function CommitControls({
             <div className="flex items-center justify-between text-xs">
               <span className="font-semibold text-purple-900 dark:text-purple-300 flex items-center gap-1.5 font-mono">
                 <Github className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                Engine: {copilotSource.includes("copilot") ? "GitHub Copilot (gpt-4o)" : "Gemini AI Assistant"}
+                Engine:{" "}
+                {copilotSource.includes("copilot")
+                  ? "GitHub Copilot (gpt-4o)"
+                  : copilotSource.includes("gemini")
+                  ? "Gemini 2.5 Flash"
+                  : "Hestia Smart Template"}
               </span>
 
               {prDescription && (
@@ -336,9 +454,12 @@ export default function CommitControls({
           <div className="flex items-start gap-2.5">
             <FileText className="w-5 h-5 text-stone-600 dark:text-stone-400 shrink-0 mt-0.5" />
             <div>
-              <h4 className="text-xs font-bold text-stone-950 dark:text-stone-100">
+              <h3 className="text-xs font-bold text-stone-950 dark:text-stone-100">
                 Add Custom README.md
-              </h4>
+              </h3>
+              {copilotError && (
+                <p className="text-[11px] text-red-600 dark:text-red-400 mt-1 font-medium">{copilotError}</p>
+              )}
               <p className="text-[10px] text-stone-500 dark:text-stone-400 mt-0.5 leading-relaxed">
                 Include a custom documentation file in your commit package.
               </p>
@@ -361,7 +482,7 @@ export default function CommitControls({
               rows={5}
               value={customReadmeText}
               onChange={(e) => setCustomReadmeText(e.target.value)}
-              placeholder="# My Project&#10;&#10;Write markdown documentation here..."
+              placeholder="# Project Name&#10;&#10;Document architecture, setup, and usage..."
               className="w-full p-2.5 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg text-xs font-mono text-stone-800 dark:text-stone-100 focus:outline-none focus:border-orange-500"
             />
             <button

@@ -27,7 +27,7 @@ export default function ProgressOverlay({
       case "blobs":
         return {
           title: "Stoking the Fire...",
-          desc: `Uploading files to GitHub. Creating code blobs (${status.progress.toFixed(0)}% complete).`,
+          desc: `Uploading ${totalFiles} file(s) to GitHub. Creating code blobs (${status.progress.toFixed(0)}% complete).`,
           sub: status.currentFile ? `Uploading: ${status.currentFile}` : undefined,
           color: "text-orange-500",
         };
@@ -82,11 +82,11 @@ export default function ProgressOverlay({
         {/* Status Graphic Section */}
         <div className="mb-6 relative">
           {status.stage === "success" ? (
-            <div className="w-16 h-16 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/30 text-green-600 dark:text-green-450 rounded-full flex items-center justify-center scale-110 transition-transform shadow-sm animate-bounce">
+            <div className="w-16 h-16 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center scale-110 transition-transform shadow-sm animate-bounce">
               <CheckCircle className="w-9 h-9" />
             </div>
           ) : status.stage === "error" ? (
-            <div className="w-16 h-16 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-450 rounded-full flex items-center justify-center scale-110 transition-transform shadow-sm animate-pulse">
+            <div className="w-16 h-16 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center scale-110 transition-transform shadow-sm animate-pulse">
               <XCircle className="w-9 h-9" />
             </div>
           ) : (
@@ -112,7 +112,7 @@ export default function ProgressOverlay({
 
         {/* Inner details / Subtext */}
         {status.stage !== "success" && status.stage !== "error" && (
-          <div className="w-full bg-stone-50 dark:bg-stone-850 border border-stone-100 dark:border-stone-800 rounded-xl p-3 mb-6 min-h-[50px] flex flex-col justify-center">
+          <div className="w-full bg-stone-50 dark:bg-stone-800/70 border border-stone-100 dark:border-stone-800 rounded-xl p-3 mb-6 min-h-[50px] flex flex-col justify-center">
             {stage.sub ? (
               <span className="text-[11px] font-mono text-stone-500 dark:text-stone-400 break-all truncate block">
                 {stage.sub}
@@ -152,7 +152,7 @@ export default function ProgressOverlay({
                 href={status.resultUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full py-3 px-4 bg-stone-950 dark:bg-stone-800 hover:bg-stone-850 dark:hover:bg-stone-700 text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                className="w-full py-3 px-4 bg-stone-950 dark:bg-stone-800 hover:bg-stone-800 dark:hover:bg-stone-700 text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
               >
                 <Github className="w-4 h-4" />
                 Explore Repository on GitHub
@@ -162,7 +162,7 @@ export default function ProgressOverlay({
             
             <button
               onClick={onDismiss}
-              className="w-full py-3 px-4 border border-stone-200 dark:border-stone-750 hover:bg-stone-50 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 font-semibold text-sm rounded-xl transition cursor-pointer"
+              className="w-full py-3 px-4 border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 font-semibold text-sm rounded-xl transition cursor-pointer"
             >
               Return to Hearth Dashboard
             </button>

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { GitCommit, Clock, ExternalLink, RefreshCw, AlertCircle, User, Calendar } from "lucide-react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { GitCommit, Clock, ExternalLink, RefreshCw, AlertCircle, User } from "lucide-react";
 import { GithubCommit } from "../types";
 
 interface RecentCommitsProps {
@@ -13,13 +13,20 @@ export default function RecentCommits({ token, owner, repo, refreshTrigger }: Re
   const [commits, setCommits] = useState<GithubCommit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const fetchCommits = async () => {
+  const fetchCommits = useCallback(async () => {
+    abortControllerRef.current?.abort();
+
     if (!token || !owner || !repo) {
       setCommits([]);
       setError(null);
+      setLoading(false);
       return;
     }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     setLoading(true);
     setError(null);
@@ -29,6 +36,7 @@ export default function RecentCommits({ token, owner, repo, refreshTrigger }: Re
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, owner, repo }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -37,25 +45,34 @@ export default function RecentCommits({ token, owner, repo, refreshTrigger }: Re
       }
 
       const data = await response.json();
-      setCommits(data);
+      if (!controller.signal.aborted) {
+        setCommits(data);
+      }
     } catch (err: any) {
-      console.error("Failed to load commits:", err);
-      setError(err.message || "Unable to fetch recent commits.");
+      if (err?.name === "AbortError") return;
+      if (!controller.signal.aborted) {
+        setError(err.message || "Unable to fetch recent commits.");
+      }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
-  };
+  }, [token, owner, repo]);
 
   useEffect(() => {
     fetchCommits();
-  }, [token, owner, repo, refreshTrigger]);
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, [fetchCommits, refreshTrigger]);
 
   if (!token || !owner || !repo) {
     return (
       <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 p-6 shadow-sm">
         <div className="flex items-center gap-2 pb-3 border-b border-stone-100 dark:border-stone-800/80 mb-4">
           <GitCommit className="w-5 h-5 text-orange-500" />
-          <h3 className="font-semibold text-stone-900 dark:text-stone-100">Recent Transmissions</h3>
+          <h2 className="font-semibold text-stone-900 dark:text-stone-100">Recent Transmissions</h2>
         </div>
         <div className="flex flex-col items-center justify-center py-6 text-center text-stone-400 dark:text-stone-500">
           <Clock className="w-8 h-8 mb-2 opacity-60" />
@@ -86,7 +103,7 @@ export default function RecentCommits({ token, owner, repo, refreshTrigger }: Re
       <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-stone-800/80">
         <div className="flex items-center gap-2">
           <GitCommit className="w-5 h-5 text-orange-500" />
-          <h3 className="font-semibold text-stone-900 dark:text-stone-100">Recent Transmissions</h3>
+          <h2 className="font-semibold text-stone-900 dark:text-stone-100">Recent Transmissions</h2>
           <span className="text-[10px] bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 px-2 py-0.5 rounded-md font-mono">
             Last 5
           </span>
@@ -111,7 +128,7 @@ export default function RecentCommits({ token, owner, repo, refreshTrigger }: Re
           </div>
           <button
             onClick={fetchCommits}
-            className="text-[10px] font-bold uppercase tracking-wider text-red-800 hover:text-red-950 dark:text-red-400 dark:hover:text-red-350 cursor-pointer"
+            className="text-[10px] font-bold uppercase tracking-wider text-red-800 hover:text-red-950 dark:text-red-400 dark:hover:text-red-300 cursor-pointer"
           >
             Retry
           </button>
@@ -141,9 +158,9 @@ export default function RecentCommits({ token, owner, repo, refreshTrigger }: Re
               <div key={commit.sha} className="py-3 first:pt-0 last:pb-0 group">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1 space-y-1">
-                    <h4 className="text-xs font-bold text-stone-800 dark:text-stone-200 break-words leading-tight group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
+                    <h3 className="text-xs font-bold text-stone-800 dark:text-stone-200 break-words leading-tight group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
                       {title}
-                    </h4>
+                    </h3>
                     {body && (
                       <p className="text-[10px] text-stone-500 dark:text-stone-400 font-mono whitespace-pre-wrap leading-relaxed truncate max-h-[40px]">
                         {body}
@@ -154,9 +171,12 @@ export default function RecentCommits({ token, owner, repo, refreshTrigger }: Re
                         {commit.author.avatar_url ? (
                           <img
                             src={commit.author.avatar_url}
-                            alt={commit.author.login || commit.author.name}
+                            alt={`Commit author avatar for ${commit.author.login || commit.author.name}`}
                             className="w-3.5 h-3.5 rounded-full object-cover"
                             referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              e.currentTarget.src = "/favicon.svg";
+                            }}
                           />
                         ) : (
                           <User className="w-3 h-3" />

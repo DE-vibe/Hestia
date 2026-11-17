@@ -1,36 +1,65 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Flame, Check, Sparkles, CreditCard, Shield, X, HelpCircle, Loader2 } from "lucide-react";
 
 interface PricingModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpgradeSuccess: () => void;
+  isTrialActive?: boolean;
+  trialDaysLeft?: number;
 }
 
-export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: PricingModalProps) {
+export default function PricingModal({
+  isOpen,
+  onClose,
+  onUpgradeSuccess,
+  isTrialActive = true,
+  trialDaysLeft = 10,
+}: PricingModalProps) {
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
   const [loading, setLoading] = useState(false);
   const [cardNumber, setCardNumber] = useState("");
   const [expiry, setExpiry] = useState("");
   const [cvc, setCvc] = useState("");
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const checkoutTimersRef = useRef<number[]>([]);
+
+  const clearCheckoutTimers = () => {
+    checkoutTimersRef.current.forEach((id) => window.clearTimeout(id));
+    checkoutTimersRef.current = [];
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      clearCheckoutTimers();
+      setLoading(false);
+      setPaymentSuccess(false);
+    }
+    return () => {
+      clearCheckoutTimers();
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleCheckout = (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading || paymentSuccess) return;
+    clearCheckoutTimers();
     setLoading(true);
-    
-    // Simulate payment processor stoking the fire
-    setTimeout(() => {
+
+    const t1 = window.setTimeout(() => {
       setLoading(false);
       setPaymentSuccess(true);
-      setTimeout(() => {
+      const t2 = window.setTimeout(() => {
         onUpgradeSuccess();
         setPaymentSuccess(false);
         onClose();
       }, 2000);
+      checkoutTimersRef.current.push(t2);
     }, 2500);
+
+    checkoutTimersRef.current.push(t1);
   };
 
   return (
@@ -58,10 +87,22 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
               <span className="font-bold text-xs tracking-widest uppercase text-amber-500">HESTIA GOLDEN EMBERS</span>
             </div>
 
+            {isTrialActive && (
+              <div className="bg-emerald-500/20 border border-emerald-500/40 rounded-xl p-3 text-xs text-emerald-300 font-mono flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div>
+                  <span className="font-bold text-white block">🎁 10-Day Free Trial Active!</span>
+                  <span className="text-[10px] text-emerald-200">
+                    You currently have {trialDaysLeft} day{trialDaysLeft > 1 ? "s" : ""} left of unlimited pushes & unlocked features for free.
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div>
-              <h3 className="text-2xl font-black tracking-tight leading-tight">UPGRADE TO THE GOLDEN HEARTH</h3>
+              <h2 className="text-2xl font-black tracking-tight leading-tight">UPGRADE TO THE GOLDEN HEARTH</h2>
               <p className="text-xs text-stone-400 mt-2 leading-relaxed">
-                Stoke your engineering hearth to maximum capacity. Fuel your projects with unlimited transfers and full GitHub repository control.
+                Stoke your engineering hearth to maximum capacity. Maintain permanent access to unlimited transfers even after your 10-day free trial ends.
               </p>
             </div>
 
@@ -71,7 +112,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                   <Check className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold">Unlimited Code Pushes</h4>
+                  <h3 className="text-xs font-bold">Unlimited Code Pushes</h3>
                   <p className="text-[10px] text-stone-400 mt-0.5">Push code packages from any device or AI Studio without daily limits.</p>
                 </div>
               </div>
@@ -81,7 +122,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                   <Check className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold">Advanced Repository Automation</h4>
+                  <h3 className="text-xs font-bold">Advanced Repository Automation</h3>
                   <p className="text-[10px] text-stone-400 mt-0.5">Automatic branch setup, custom README generation, and high-speed commit processing.</p>
                 </div>
               </div>
@@ -91,7 +132,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                   <Check className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold">Private Repository Provisioning</h4>
+                  <h3 className="text-xs font-bold">Private Repository Provisioning</h3>
                   <p className="text-[10px] text-stone-400 mt-0.5">Create and target unlimited secure private repositories directly from Hestia.</p>
                 </div>
               </div>
@@ -107,7 +148,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
         <div className="w-full md:w-1/2 p-8 flex flex-col justify-between">
           <div>
             <div className="mb-6">
-              <h4 className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Select Billing Interval</h4>
+              <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Select Billing Interval</h3>
               
               <div className="flex bg-stone-100 p-1 rounded-xl border border-stone-200">
                 <button
@@ -116,7 +157,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                   className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
                     billingPeriod === "monthly"
                       ? "bg-white text-stone-950 shadow-xs"
-                      : "text-stone-500 hover:text-stone-850"
+                      : "text-stone-500 hover:text-stone-800"
                   }`}
                 >
                   Monthly ($9.99)
@@ -127,7 +168,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                   className={`flex-1 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
                     billingPeriod === "yearly"
                       ? "bg-stone-900 text-white shadow-xs"
-                      : "text-stone-500 hover:text-stone-850"
+                      : "text-stone-500 hover:text-stone-800"
                   }`}
                 >
                   Yearly ($49.99)
@@ -143,7 +184,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                 <div className="w-14 h-14 bg-green-50 border border-green-200 text-green-600 rounded-full flex items-center justify-center mb-4">
                   <Check className="w-8 h-8" />
                 </div>
-                <h4 className="text-sm font-bold text-stone-950">Payment Successful!</h4>
+                <h3 className="text-sm font-bold text-stone-950">Payment Successful!</h3>
                 <p className="text-xs text-stone-500 mt-1">Stoking the premium golden embers on your account...</p>
               </div>
             ) : (
@@ -166,7 +207,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                     <input
                       type="text"
                       required
-                      placeholder="e.g. Daniele Likene"
+                      placeholder="Full name on card"
                       className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition"
                     />
                   </div>
@@ -179,9 +220,12 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                       <input
                         type="text"
                         required
-                        placeholder="4111 2222 3333 4444"
+                        placeholder="•••• •••• •••• ••••"
                         value={cardNumber}
-                        onChange={(e) => setCardNumber(e.target.value.replace(/\s?/g, '').replace(/(\d{4})/g, '$1 ').trim().slice(0, 19))}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "").slice(0, 16);
+                          setCardNumber((digits.match(/.{1,4}/g) || []).join(" "));
+                        }}
                         className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition font-mono"
                       />
                       <CreditCard className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -196,9 +240,12 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                       <input
                         type="text"
                         required
-                        placeholder="MM / YY"
+                        placeholder="MM/YY"
                         value={expiry}
-                        onChange={(e) => setExpiry(e.target.value.replace(/\s?/g, '').replace(/(\d{2})/g, '$1/').trim().replace(/\/$/, '').slice(0, 5))}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                          setExpiry(digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits);
+                        }}
                         className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition font-mono"
                       />
                     </div>
@@ -209,7 +256,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                       <input
                         type="password"
                         required
-                        placeholder="123"
+                        placeholder="CVC"
                         value={cvc}
                         onChange={(e) => setCvc(e.target.value.replace(/\D/g, '').slice(0, 4))}
                         className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition font-mono"
@@ -231,7 +278,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
                   ) : (
                     <>
                       <Shield className="w-3.5 h-3.5" />
-                      Authorize & Unlock Hearth Premium
+                      Authorize &amp; Unlock Hearth Premium
                     </>
                   )}
                 </button>
@@ -241,7 +288,7 @@ export default function PricingModal({ isOpen, onClose, onUpgradeSuccess }: Pric
 
           <div className="pt-4 text-[10px] text-stone-400 text-center flex items-center justify-center gap-1">
             <HelpCircle className="w-3.5 h-3.5 text-stone-300" />
-            <span>Mock payment processing for local preview sessions</span>
+            <span>Encrypted license activation for Hestia Golden Embers</span>
           </div>
         </div>
 
